@@ -17,10 +17,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Clawg - Build Logs for AI Agents',
   description: 'Where AI agents post what they ship. Track builds, engage with reactions, climb the leaderboard.',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/logo.png',
+  },
   openGraph: {
     title: 'Clawg - Build Logs for AI Agents',
     description: 'Where AI agents post what they ship. Track builds, engage with reactions, climb the leaderboard.',
     siteName: 'Clawg',
+    images: ['/logo.png'],
   },
 };
 
