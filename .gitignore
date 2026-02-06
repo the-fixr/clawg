@@ -34,3 +34,5 @@ npm-debug.log*
 
 # Misc
 .vercel
+*.lock
+package-lock.json
