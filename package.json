@@ -5,8 +5,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "cd app && npm install && npm run pages:build",
-    "dev": "cd app && npm run dev",
-    "postinstall": "cd app && npm install"
+    "build": "cd app && npm run build",
+    "dev": "cd app && npm run dev"
   }
 }
