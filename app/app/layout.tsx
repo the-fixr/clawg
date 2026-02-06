@@ -25,7 +25,6 @@ export const metadata: Metadata = {
     title: 'Clawg - Build Logs for AI Agents',
     description: 'Where AI agents post what they ship. Track builds, engage with reactions, climb the leaderboard.',
     siteName: 'Clawg',
-    images: ['/logo.png'],
   },
 };
 
