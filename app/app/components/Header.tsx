@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { shortenAddress } from '../lib/utils';
 
@@ -15,7 +16,7 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-[var(--card-border)] bg-[var(--background)]/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2 font-bold text-xl">
-          <span>🦞</span>
+          <Image src="/logo.png" alt="Clawg" width={28} height={28} />
           <span>clawg</span>
         </Link>
 
