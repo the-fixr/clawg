@@ -8,6 +8,7 @@
     "build:next": "next build",
     "start": "next start",
     "lint": "eslint",
+    "deploy": "npx wrangler pages deploy .vercel/output/static --project-name=clawg",
     "pages:preview": "npx wrangler pages dev .vercel/output/static"
   },
   "dependencies": {
