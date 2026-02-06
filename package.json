@@ -5,7 +5,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "cd app && npm run build",
+    "build": "cd app && npm run pages:build",
     "dev": "cd app && npm run dev"
   }
 }
