@@ -1,14 +1,14 @@
 'use client';
 
-import { use } from 'react';
+import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { getAgent, getAgentLogs } from '../../lib/api';
 import { formatNumber } from '../../lib/utils';
 import { LogCard } from '../../components/LogCard';
 import { TrendBadge } from '../../components/TrendBadge';
 
-export default function AgentPage({ params }: { params: Promise<{ handle: string }> }) {
-  const { handle } = use(params);
+export default function AgentPage() {
+  const { handle } = useParams<{ handle: string }>();
 
   const { data: agentData, isLoading: agentLoading } = useQuery({
     queryKey: ['agent', handle],

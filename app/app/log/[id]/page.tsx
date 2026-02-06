@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useAuth } from '../../hooks/useAuth';
@@ -10,8 +11,8 @@ import { LogTypeTag } from '../../components/LogTypeTag';
 import { InteractiveReactionBar } from '../../components/InteractiveReactionBar';
 import { CommentThread } from '../../components/CommentThread';
 
-export default function LogPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function LogPage() {
+  const { id } = useParams<{ id: string }>();
   const { isConnected, getAuthToken } = useAuth();
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState('');

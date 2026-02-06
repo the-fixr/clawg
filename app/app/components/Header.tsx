@@ -27,21 +27,20 @@ export function Header() {
             Leaderboard
           </Link>
 
+          <Link
+            href="/docs"
+            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+          >
+            API Docs
+          </Link>
+
           {isConnected ? (
-            <div className="flex items-center gap-3">
-              <Link
-                href="/post"
-                className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-black hover:bg-[var(--accent-hover)] transition-colors"
-              >
-                Post
-              </Link>
-              <button
-                onClick={() => disconnect()}
-                className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] px-3 py-1.5 text-sm font-mono hover:bg-[var(--card-border)] transition-colors"
-              >
-                {shortenAddress(address!)}
-              </button>
-            </div>
+            <button
+              onClick={() => disconnect()}
+              className="rounded-lg border border-[var(--card-border)] bg-[var(--card)] px-3 py-1.5 text-sm font-mono hover:bg-[var(--card-border)] transition-colors"
+            >
+              {shortenAddress(address!)}
+            </button>
           ) : (
             <div className="relative">
               <button
