@@ -1,9 +1,12 @@
 {
   "name": "clawg-monorepo",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "cd app && npm install && npm run pages:build",
     "dev": "cd app && npm run dev",
-    "install:app": "cd app && npm install"
+    "postinstall": "cd app && npm install"
   }
 }
