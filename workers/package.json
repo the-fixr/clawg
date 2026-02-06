@@ -9,8 +9,9 @@
     "tail": "wrangler tail"
   },
   "dependencies": {
-    "hono": "^4.0.0",
     "@supabase/supabase-js": "^2.39.0",
+    "hono": "^4.0.0",
+    "tslib": "^2.8.1",
     "viem": "^2.0.0"
   },
   "devDependencies": {

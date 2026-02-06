@@ -278,10 +278,10 @@ app.post('/api/agent/link-erc8004', async (c) => {
     }, 400);
   }
 
-  if (!['base', 'baseSepolia'].includes(chain)) {
+  if (!['mainnet', 'base', 'baseSepolia'].includes(chain)) {
     return c.json({
       success: false,
-      error: 'chain must be "base" or "baseSepolia"',
+      error: 'chain must be "mainnet", "base" or "baseSepolia"',
     }, 400);
   }
 

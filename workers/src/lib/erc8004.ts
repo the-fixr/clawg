@@ -9,7 +9,7 @@
  */
 
 import { createPublicClient, http, Address, Hex, encodeFunctionData } from 'viem';
-import { base, baseSepolia } from 'viem/chains';
+import { mainnet, base, baseSepolia } from 'viem/chains';
 import type { Env } from './types';
 
 // ============================================================================
@@ -17,6 +17,11 @@ import type { Env } from './types';
 // ============================================================================
 
 export const ERC8004_CONTRACTS = {
+  // Ethereum Mainnet (live registry)
+  mainnet: {
+    identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as Address,
+    reputationRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
+  },
   // Base Mainnet (when deployed)
   base: {
     identityRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
@@ -118,14 +123,21 @@ export const REPUTATION_REGISTRY_ABI = [
 // CLIENT HELPERS
 // ============================================================================
 
+// Public RPCs with better reliability
+const RPC_URLS: Record<SupportedChain, string> = {
+  mainnet: 'https://eth.llamarpc.com',
+  base: 'https://mainnet.base.org',
+  baseSepolia: 'https://sepolia.base.org',
+};
+
 /**
  * Get a viem public client for the specified chain
  */
 export function getPublicClient(chain: SupportedChain) {
-  const chainConfig = chain === 'base' ? base : baseSepolia;
+  const chainConfig = chain === 'mainnet' ? mainnet : chain === 'base' ? base : baseSepolia;
   return createPublicClient({
     chain: chainConfig,
-    transport: http(),
+    transport: http(RPC_URLS[chain]),
   });
 }
 
@@ -153,19 +165,27 @@ export async function verifyAgentOwnership(
       args: [agentId],
     });
 
-    // Check agent wallet (the wallet the agent uses for operations)
-    const agentWallet = await client.readContract({
-      address: contracts.identityRegistry,
-      abi: IDENTITY_REGISTRY_ABI,
-      functionName: 'getAgentWallet',
-      args: [agentId],
-    });
+    // Wallet is authorized if it owns the NFT
+    const isOwner = ownerAddress.toLowerCase() === walletAddress.toLowerCase();
 
-    // Wallet is authorized if it's either the NFT owner or the agent's wallet
-    const isOwner =
-      ownerAddress.toLowerCase() === walletAddress.toLowerCase() ||
-      (agentWallet !== '0x0000000000000000000000000000000000000000' &&
-        agentWallet.toLowerCase() === walletAddress.toLowerCase());
+    // Optionally check agent wallet if the function exists
+    let agentWallet: Address | undefined;
+    try {
+      agentWallet = await client.readContract({
+        address: contracts.identityRegistry,
+        abi: IDENTITY_REGISTRY_ABI,
+        functionName: 'getAgentWallet',
+        args: [agentId],
+      });
+      // If agentWallet is set and matches, also consider as owner
+      if (agentWallet &&
+          agentWallet !== '0x0000000000000000000000000000000000000000' &&
+          agentWallet.toLowerCase() === walletAddress.toLowerCase()) {
+        return { isOwner: true, ownerAddress, agentWallet };
+      }
+    } catch {
+      // getAgentWallet not available on this contract, skip
+    }
 
     return { isOwner, ownerAddress, agentWallet };
   } catch (error) {

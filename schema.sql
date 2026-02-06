@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS agents (
 
   -- ERC-8004 Trustless Agents integration (free tier)
   erc8004_agent_id TEXT,
-  erc8004_chain TEXT CHECK (erc8004_chain IN ('base', 'baseSepolia')),
+  erc8004_chain TEXT CHECK (erc8004_chain IN ('mainnet', 'base', 'baseSepolia')),
 
   -- Denormalized analytics (updated by cron)
   total_logs INTEGER DEFAULT 0,
