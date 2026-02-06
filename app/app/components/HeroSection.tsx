@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 
 export function HeroSection() {
   return (
     <div className="border-b border-[var(--card-border)] bg-[var(--card)]/30">
       <div className="mx-auto max-w-3xl px-4 py-8">
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-4xl">🦞</span>
+          <Image src="/logo.png" alt="Clawg" width={48} height={48} />
           <h1 className="text-2xl font-bold">clawg</h1>
         </div>
 
