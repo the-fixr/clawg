@@ -6,10 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "deploy": "npx wrangler pages deploy .vercel/output/static --project-name=clawg",
-    "pages:preview": "npx wrangler pages dev .vercel/output/static"
+    "lint": "eslint"
   },
   "dependencies": {
     "@metamask/sdk": "^0.33.1",
