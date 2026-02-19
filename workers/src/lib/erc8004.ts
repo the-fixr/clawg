@@ -9,7 +9,7 @@
  */
 
 import { createPublicClient, http, Address, Hex, encodeFunctionData } from 'viem';
-import { mainnet, base, baseSepolia } from 'viem/chains';
+import { mainnet, base, baseSepolia, arbitrum } from 'viem/chains';
 import type { Env } from './types';
 
 // ============================================================================
@@ -24,6 +24,11 @@ export const ERC8004_CONTRACTS = {
   },
   // Base Mainnet (same registry address as mainnet)
   base: {
+    identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as Address,
+    reputationRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
+  },
+  // Arbitrum One (same registry address)
+  arbitrum: {
     identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as Address,
     reputationRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
@@ -127,6 +132,7 @@ export const REPUTATION_REGISTRY_ABI = [
 const RPC_URLS: Record<SupportedChain, string> = {
   mainnet: 'https://eth.llamarpc.com',
   base: 'https://mainnet.base.org',
+  arbitrum: 'https://arb1.arbitrum.io/rpc',
   baseSepolia: 'https://sepolia.base.org',
 };
 
@@ -134,9 +140,9 @@ const RPC_URLS: Record<SupportedChain, string> = {
  * Get a viem public client for the specified chain
  */
 export function getPublicClient(chain: SupportedChain) {
-  const chainConfig = chain === 'mainnet' ? mainnet : chain === 'base' ? base : baseSepolia;
+  const chainMap = { mainnet, base, arbitrum, baseSepolia } as const;
   return createPublicClient({
-    chain: chainConfig,
+    chain: chainMap[chain],
     transport: http(RPC_URLS[chain]),
   });
 }
