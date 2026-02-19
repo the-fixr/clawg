@@ -210,7 +210,7 @@ export async function setPrimaryToken(
 }
 
 // ============================================================================
-// TOKEN DATA FETCHING
+// TOKEN DATA FETCHING — Direct DEX reads via raw RPC
 // ============================================================================
 
 interface TokenData {
@@ -222,7 +222,175 @@ interface TokenData {
   priceChange24h: number;
 }
 
-/** Map chain names to GeckoTerminal network IDs */
+// ---------------------------------------------------------------------------
+// Known pool configs (keyed by "chain:address" lowercase)
+// ---------------------------------------------------------------------------
+
+interface PoolConfig {
+  dexType: 'uniswap_v4' | 'uniswap_v3' | 'uniswap_v2' | 'raydium_launchlab';
+  poolAddress: string; // Pool contract or PoolId (V4)
+  isToken0: boolean;   // Is the token token0 in the pair?
+}
+
+const KNOWN_POOLS: Record<string, PoolConfig> = {
+  // Base CLAWG / WETH on Uniswap V4
+  'base:0x06a127f0b53f83dd5d94e83d96b55a279705bb07': {
+    dexType: 'uniswap_v4',
+    poolAddress: '0xdc591017ff208c02a8e05baf3a7e2ed9785101f2e789b602b402ae9d529bafe0',
+    isToken0: true, // CLAWG (0x06a1) < WETH (0x4200)
+  },
+  // Solana CLAWG / SOL on Raydium LaunchLab
+  'solana:hqq7wtkme1lskkhllb6zri2rssxnbbqb4tohzbanbvbjf': {
+    dexType: 'raydium_launchlab',
+    poolAddress: 'EZSyfLfLpbyD5FctevtUHv1YYJxf4G2w8w93d4qLwaVw',
+    isToken0: true,
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Raw RPC helper (lightweight, no viem overhead for CF Workers)
+// ---------------------------------------------------------------------------
+
+const BASE_RPCS = [
+  'https://base-mainnet.public.blastapi.io',
+  'https://1rpc.io/base',
+  'https://base.llamarpc.com',
+];
+const Q96 = 2n ** 96n;
+
+/** Single eth_call with RPC failover */
+async function ethCall(rpc: string, to: string, data: string): Promise<string> {
+  const res = await fetch(rpc, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_call', params: [{ to, data }, 'latest'], id: 1 }),
+  });
+  if (!res.ok) throw new Error(`RPC returned ${res.status}`);
+  const json = await res.json() as { result?: string; error?: { message: string } };
+  if (json.error) throw new Error(json.error.message);
+  return json.result || '0x';
+}
+
+/** Batch eth_call — sends multiple calls in one HTTP request */
+async function ethCallBatch(calls: Array<{ to: string; data: string }>): Promise<string[]> {
+  const batch = calls.map((c, i) => ({
+    jsonrpc: '2.0',
+    method: 'eth_call',
+    params: [{ to: c.to, data: c.data }, 'latest'],
+    id: i + 1,
+  }));
+
+  // Try RPCs in order until one succeeds
+  for (const rpc of BASE_RPCS) {
+    try {
+      const res = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) continue;
+      const json = await res.json() as Array<{ id: number; result?: string; error?: { message: string } }>;
+      if (!Array.isArray(json)) continue;
+      // Sort by id and extract results
+      json.sort((a, b) => a.id - b.id);
+      return json.map(r => {
+        if (r.error) throw new Error(r.error.message);
+        return r.result || '0x';
+      });
+    } catch {
+      continue; // Try next RPC
+    }
+  }
+  throw new Error('All RPCs failed');
+}
+
+// ---------------------------------------------------------------------------
+// ETH price from Uniswap V3 WETH/USDC pool on Base
+// ---------------------------------------------------------------------------
+
+let ethPriceCache: { price: number; ts: number } | null = null;
+
+function parseEthPrice(sqrtPriceX96: bigint): number {
+  // V3 WETH/USDC pool: token0=WETH(18dec), token1=USDC(6dec)
+  // price = sqrtPriceX96^2 / Q192 = USDC_raw / WETH_raw
+  // ethPrice = price * 10^12
+  const ethPriceE6 = (sqrtPriceX96 * sqrtPriceX96 * (10n ** 18n)) / (Q96 * Q96);
+  return Number(ethPriceE6) / 1e6;
+}
+
+// ---------------------------------------------------------------------------
+// Uniswap V4 direct read — single batch RPC call for all data
+// ---------------------------------------------------------------------------
+
+async function fetchFromUniswapV4(
+  poolId: string,
+  tokenAddress: string,
+  tokenDecimals: number,
+  _isToken0: boolean,
+): Promise<TokenData> {
+  const poolIdHex = poolId.startsWith('0x') ? poolId.slice(2) : poolId;
+
+  // One batch: V3 slot0 (ETH price) + V4 getSlot0 (token price) + totalSupply
+  let results: string[];
+  if (ethPriceCache && Date.now() - ethPriceCache.ts < 300_000) {
+    // ETH price cached, only need 2 calls
+    results = ['CACHED', ...await ethCallBatch([
+      { to: '0xa3c0c9b65bad0b08107aa264b0f3db444b867a71', data: '0xc815641c' + poolIdHex },
+      { to: tokenAddress, data: '0x18160ddd' },
+    ])];
+  } else {
+    results = await ethCallBatch([
+      { to: '0xd0b53D9277642d899DF5C87A3966A349A798F224', data: '0x3850c7bd' }, // V3 slot0
+      { to: '0xa3c0c9b65bad0b08107aa264b0f3db444b867a71', data: '0xc815641c' + poolIdHex }, // V4 getSlot0
+      { to: tokenAddress, data: '0x18160ddd' }, // totalSupply
+    ]);
+  }
+
+  // Parse ETH price
+  let ethPrice: number;
+  if (results[0] === 'CACHED') {
+    ethPrice = ethPriceCache!.price;
+  } else {
+    const ethSqrt = BigInt('0x' + results[0].slice(2, 66));
+    ethPrice = parseEthPrice(ethSqrt);
+    ethPriceCache = { price: ethPrice, ts: Date.now() };
+  }
+
+  // Parse CLAWG price
+  const v4Idx = results[0] === 'CACHED' ? 1 : 1;
+  const tsIdx = results[0] === 'CACHED' ? 2 : 2;
+  const sqrtPriceX96 = BigInt('0x' + results[v4Idx].slice(2, 66));
+
+  const priceE18 = (sqrtPriceX96 * sqrtPriceX96 * (10n ** 18n)) / (Q96 * Q96);
+  let tokenPriceInWeth: number;
+  if (tokenDecimals === 18) {
+    tokenPriceInWeth = Number(priceE18) / 1e18;
+  } else {
+    const adj = 10n ** BigInt(Math.abs(tokenDecimals - 18));
+    tokenPriceInWeth = tokenDecimals > 18
+      ? Number(priceE18 * adj) / 1e18
+      : Number(priceE18) / (Number(adj) * 1e18);
+  }
+
+  const priceUsd = tokenPriceInWeth * ethPrice;
+  const totalSupply = BigInt(results[tsIdx]);
+  const totalSupplyHuman = Number(totalSupply) / (10 ** tokenDecimals);
+  const marketCap = priceUsd * totalSupplyHuman;
+
+  return {
+    priceUsd,
+    marketCap,
+    holders: 0,
+    volume24h: 0,
+    liquidity: 0,
+    priceChange24h: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GeckoTerminal fallback (for Solana + unknown pools)
+// ---------------------------------------------------------------------------
+
 const GECKO_NETWORK: Record<string, string> = {
   ethereum: 'eth',
   base: 'base',
@@ -231,7 +399,6 @@ const GECKO_NETWORK: Record<string, string> = {
   monad: 'monad',
 };
 
-/** Fetch token data from GeckoTerminal (all chains) */
 async function fetchFromGeckoTerminal(chain: string, contractAddress: string): Promise<TokenData> {
   const network = GECKO_NETWORK[chain] || chain;
   const res = await fetch(
@@ -262,27 +429,40 @@ async function fetchFromGeckoTerminal(chain: string, contractAddress: string): P
     holders: 0,
     volume24h: parseFloat(attrs.volume_usd?.h24 || '0'),
     liquidity: parseFloat(attrs.total_reserve_in_usd || '0'),
-    priceChange24h: 0, // GeckoTerminal token endpoint doesn't include price change
+    priceChange24h: 0,
   };
 }
 
-/** Fetch token data from the best available source */
+// ---------------------------------------------------------------------------
+// Dispatch: pick the right source based on pool config
+// ---------------------------------------------------------------------------
+
 export async function fetchTokenData(
   chain: string,
-  contractAddress: string
+  contractAddress: string,
+  decimals: number = 18,
 ): Promise<TokenData> {
+  const key = `${chain}:${contractAddress}`.toLowerCase();
+  const pool = KNOWN_POOLS[key];
+
   try {
+    if (pool?.dexType === 'uniswap_v4') {
+      return await fetchFromUniswapV4(pool.poolAddress, contractAddress, decimals, pool.isToken0);
+    }
+
+    // Solana + unknown pools: GeckoTerminal
     return await fetchFromGeckoTerminal(chain, contractAddress);
   } catch (error) {
-    console.error(`[Tokens] Failed to fetch data for ${chain}:${contractAddress}:`, error);
-    return {
-      priceUsd: 0,
-      marketCap: 0,
-      holders: 0,
-      volume24h: 0,
-      liquidity: 0,
-      priceChange24h: 0,
-    };
+    console.error(`[Tokens] Primary fetch failed for ${chain}:${contractAddress}:`, error);
+    // If direct DEX read failed, try GeckoTerminal as fallback
+    if (pool) {
+      try {
+        return await fetchFromGeckoTerminal(chain, contractAddress);
+      } catch (fallbackError) {
+        console.error(`[Tokens] Fallback also failed:`, fallbackError);
+      }
+    }
+    return { priceUsd: 0, marketCap: 0, holders: 0, volume24h: 0, liquidity: 0, priceChange24h: 0 };
   }
 }
 
@@ -291,7 +471,8 @@ export async function recordTokenSnapshot(
   env: Env,
   tokenId: string,
   chain?: string,
-  contractAddress?: string
+  contractAddress?: string,
+  decimals?: number,
 ): Promise<void> {
   const supabase = getSupabase(env);
 
@@ -299,16 +480,17 @@ export async function recordTokenSnapshot(
   if (!chain || !contractAddress) {
     const { data: token } = await supabase
       .from(TABLES.AGENT_TOKENS)
-      .select('chain, contract_address')
+      .select('chain, contract_address, decimals')
       .eq('id', tokenId)
       .single();
 
     if (!token) return;
     chain = token.chain;
     contractAddress = token.contract_address;
+    decimals = token.decimals;
   }
 
-  const data = await fetchTokenData(chain, contractAddress);
+  const data = await fetchTokenData(chain, contractAddress, decimals ?? 18);
 
   await supabase.from(TABLES.TOKEN_SNAPSHOTS).insert({
     token_id: tokenId,

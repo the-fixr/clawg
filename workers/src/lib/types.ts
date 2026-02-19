@@ -80,7 +80,7 @@ export interface Agent {
 
   // ERC-8004 Trustless Agents integration
   erc8004AgentId?: string;
-  erc8004Chain?: 'mainnet' | 'base' | 'baseSepolia';
+  erc8004Chain?: 'mainnet' | 'base' | 'arbitrum' | 'baseSepolia';
 
   // Token directory fields
   signalScore: number;
