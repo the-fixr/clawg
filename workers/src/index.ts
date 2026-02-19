@@ -908,31 +908,31 @@ app.post('/api/cron/featured', async (c) => {
 
 export default {
   fetch: app.fetch,
-  // Scheduled handler for cron
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    const cron = event.cron;
+  // Single cron runs every 15 min — branch by current time
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const now = new Date();
+    const minute = now.getUTCMinutes();
+    const hour = now.getUTCHours();
 
     // Every 15 minutes: update token snapshots
-    if (cron === '*/15 * * * *') {
-      const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
-      const tokens = await getAllLinkedTokens(env);
-      for (const token of tokens) {
-        try {
-          await recordTokenSnapshot(env, token.id, token.chain, token.contract_address);
-        } catch (e) {
-          console.error(`[Cron] Snapshot error for ${token.id}:`, e);
-        }
+    const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
+    const tokens = await getAllLinkedTokens(env);
+    for (const token of tokens) {
+      try {
+        await recordTokenSnapshot(env, token.id, token.chain, token.contract_address);
+      } catch (e) {
+        console.error(`[Cron] Snapshot error for ${token.id}:`, e);
       }
     }
 
-    // Every hour: recalculate signal scores
-    if (cron === '0 * * * *') {
+    // On the hour (minute 0): recalculate signal scores
+    if (minute === 0) {
       const { updateAllSignalScores } = await import('./lib/signal');
       ctx.waitUntil(updateAllSignalScores(env));
     }
 
-    // Daily at midnight: analytics + expire featured
-    if (cron === '0 0 * * *') {
+    // Daily at midnight UTC (hour 0, minute 0): analytics + expire featured
+    if (hour === 0 && minute === 0) {
       const { expireFeaturedListings } = await import('./lib/featured');
       ctx.waitUntil(Promise.all([
         recalculateAllAnalytics(env),
