@@ -11,10 +11,6 @@ ENVIRONMENT = "production"
 # binding = "CLAWG_KV"
 # id = "your-kv-namespace-id"
 
-# Cron triggers
+# Single cron — runs every 15 min, handler decides what to do
 [triggers]
-crons = [
-  "*/15 * * * *",  # Every 15 min: token snapshots
-  "0 * * * *",     # Every hour: signal scores
-  "0 0 * * *"      # Daily: analytics + expire featured
-]
+crons = ["*/15 * * * *"]
