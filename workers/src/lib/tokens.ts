@@ -463,43 +463,6 @@ async function fetchGeckoHolderData(chain: string, contractAddress: string): Pro
   }
 }
 
-/** Fetch token-level data from GeckoTerminal (fallback when pool data unavailable) */
-async function fetchGeckoTokenData(chain: string, contractAddress: string): Promise<Partial<TokenData>> {
-  const network = GECKO_NETWORK[chain] || chain;
-  try {
-    const res = await fetch(
-      `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${contractAddress}`,
-      { headers: { Accept: 'application/json' } }
-    );
-    if (!res.ok) return {};
-
-    const json = await res.json() as {
-      data?: {
-        attributes?: {
-          price_usd?: string | null;
-          fdv_usd?: string | null;
-          market_cap_usd?: string | null;
-          total_reserve_in_usd?: string | null;
-          volume_usd?: { h24?: string | null };
-        };
-      };
-    };
-
-    const attrs = json.data?.attributes;
-    if (!attrs) return {};
-
-    return {
-      priceUsd: parseFloat(attrs.price_usd || '0'),
-      marketCap: parseFloat(attrs.fdv_usd || attrs.market_cap_usd || '0'),
-      volume24h: parseFloat(attrs.volume_usd?.h24 || '0'),
-      liquidity: parseFloat(attrs.total_reserve_in_usd || '0'),
-    };
-  } catch (e) {
-    console.error('[Tokens] GeckoTerminal token fetch failed:', e);
-    return {};
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Dispatch: aggregate data from multiple sources
 // ---------------------------------------------------------------------------
@@ -517,29 +480,28 @@ export async function fetchTokenData(
   const key = `${chain}:${contractAddress}`.toLowerCase();
   const pool = KNOWN_POOLS[key];
 
-  // Collect data from all sources in parallel
-  const sources: Promise<Partial<TokenData>>[] = [];
+  // Two data sources only (stay under GeckoTerminal 30 req/min):
+  //   1. Direct DEX read (if known pool) — price, market cap
+  //   2. GeckoTerminal /pools — price, volume, liquidity, price change, FDV
+  //   3. GeckoTerminal /info — holder count (staggered 1s after /pools)
+  const results: Partial<TokenData>[] = [];
 
-  // Source 1: Direct DEX read (if known pool)
+  // Batch 1: Direct DEX read + GeckoTerminal pools (in parallel)
+  const batch1: Promise<Partial<TokenData>>[] = [];
   if (pool?.dexType === 'uniswap_v4') {
-    sources.push(
+    batch1.push(
       fetchFromUniswapV4(pool.poolAddress, contractAddress, decimals, pool.isToken0)
         .catch(e => { console.error('[Tokens] Uniswap V4 read failed:', e); return {}; })
     );
   }
+  batch1.push(fetchGeckoPoolData(chain, contractAddress));
+  results.push(...await Promise.all(batch1));
 
-  // Source 2: GeckoTerminal pool data (price, volume, liquidity, price change)
-  sources.push(fetchGeckoPoolData(chain, contractAddress));
+  // Batch 2: GeckoTerminal holder data (staggered — 1s delay to avoid 429)
+  await new Promise(r => setTimeout(r, 1000));
+  results.push(await fetchGeckoHolderData(chain, contractAddress));
 
-  // Source 3: GeckoTerminal holder data
-  sources.push(fetchGeckoHolderData(chain, contractAddress));
-
-  // Source 4: GeckoTerminal token-level data (fallback for price/mcap)
-  sources.push(fetchGeckoTokenData(chain, contractAddress));
-
-  const results = await Promise.all(sources);
-
-  // Merge: prefer direct DEX read for price/mcap, GeckoTerminal for everything else
+  // Merge: best value from each source wins
   const merged: TokenData = {
     priceUsd: 0,
     marketCap: 0,
@@ -555,7 +517,6 @@ export async function fetchTokenData(
     merged.holders = best(merged.holders, r.holders);
     merged.volume24h = best(merged.volume24h, r.volume24h);
     merged.liquidity = best(merged.liquidity, r.liquidity);
-    // For price change, 0 is valid (no change), so only override if we have no data yet
     if (merged.priceChange24h === 0 && r.priceChange24h !== undefined && r.priceChange24h !== 0) {
       merged.priceChange24h = r.priceChange24h;
     }
@@ -589,6 +550,18 @@ export async function recordTokenSnapshot(
   }
 
   const data = await fetchTokenData(chain!, contractAddress!, decimals ?? 18);
+
+  // Carry forward last known non-zero holders when current fetch returns 0
+  if (data.holders === 0) {
+    const { data: rows } = await supabase
+      .from(TABLES.TOKEN_SNAPSHOTS)
+      .select('holders')
+      .eq('token_id', tokenId)
+      .gt('holders', 0)
+      .order('snapshot_at', { ascending: false })
+      .limit(1);
+    if (rows && rows.length > 0) data.holders = rows[0].holders;
+  }
 
   await supabase.from(TABLES.TOKEN_SNAPSHOTS).insert({
     token_id: tokenId,

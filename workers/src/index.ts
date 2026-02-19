@@ -870,6 +870,7 @@ app.post('/api/cron/analytics', async (c) => {
   return c.json({ success: true, data: result });
 });
 
+
 // Update token snapshots (call via cron)
 app.post('/api/cron/snapshots', async (c) => {
   const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
@@ -877,8 +878,8 @@ app.post('/api/cron/snapshots', async (c) => {
   let updated = 0;
 
   for (let i = 0; i < tokens.length; i++) {
-    // Rate-limit: 2s between calls (GeckoTerminal fallback needs it)
-    if (i > 0) await new Promise(r => setTimeout(r, 2000));
+    // Rate-limit: 5s between tokens (GeckoTerminal 30 req/min, 2 calls per token)
+    if (i > 0) await new Promise(r => setTimeout(r, 5000));
     try {
       await recordTokenSnapshot(c.env, tokens[i].id, tokens[i].chain, tokens[i].contract_address, tokens[i].decimals);
       updated++;
@@ -920,7 +921,7 @@ export default {
     const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
     const tokens = await getAllLinkedTokens(env);
     for (let i = 0; i < tokens.length; i++) {
-      if (i > 0) await new Promise(r => setTimeout(r, 2000));
+      if (i > 0) await new Promise(r => setTimeout(r, 5000));
       try {
         await recordTokenSnapshot(env, tokens[i].id, tokens[i].chain, tokens[i].contract_address, tokens[i].decimals);
       } catch (e) {
