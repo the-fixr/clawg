@@ -101,7 +101,7 @@ export async function unlinkToken(
   // Decrement token_count
   await supabase
     .from(TABLES.AGENTS)
-    .update({ token_count: supabase.rpc ? 0 : 0 })
+    .update({ token_count: 0 })
     .eq('id', agentId);
 
   // Recalculate token_count
@@ -388,7 +388,7 @@ async function fetchFromUniswapV4(
 }
 
 // ---------------------------------------------------------------------------
-// GeckoTerminal fallback (for Solana + unknown pools)
+// GeckoTerminal — multi-endpoint data aggregation
 // ---------------------------------------------------------------------------
 
 const GECKO_NETWORK: Record<string, string> = {
@@ -399,43 +399,115 @@ const GECKO_NETWORK: Record<string, string> = {
   monad: 'monad',
 };
 
-async function fetchFromGeckoTerminal(chain: string, contractAddress: string): Promise<TokenData> {
+/** Fetch price/volume/liquidity from GeckoTerminal pools endpoint (best pool) */
+async function fetchGeckoPoolData(chain: string, contractAddress: string): Promise<Partial<TokenData>> {
   const network = GECKO_NETWORK[chain] || chain;
-  const res = await fetch(
-    `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${contractAddress}`,
-    { headers: { Accept: 'application/json' } }
-  );
+  try {
+    const res = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${contractAddress}/pools?page=1`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return {};
 
-  if (!res.ok) throw new Error(`GeckoTerminal returned ${res.status}`);
+    const json = await res.json() as {
+      data?: Array<{
+        attributes?: {
+          base_token_price_usd?: string | null;
+          fdv_usd?: string | null;
+          market_cap_usd?: string | null;
+          reserve_in_usd?: string | null;
+          volume_usd?: { h24?: string | null };
+          price_change_percentage?: { h24?: string | null };
+        };
+      }>;
+    };
 
-  const json = await res.json() as {
-    data?: {
-      attributes?: {
-        price_usd?: string | null;
-        fdv_usd?: string | null;
-        market_cap_usd?: string | null;
-        total_reserve_in_usd?: string | null;
-        volume_usd?: { h24?: string | null };
+    const pool = json.data?.[0]?.attributes;
+    if (!pool) return {};
+
+    return {
+      priceUsd: parseFloat(pool.base_token_price_usd || '0'),
+      marketCap: parseFloat(pool.fdv_usd || pool.market_cap_usd || '0'),
+      volume24h: parseFloat(pool.volume_usd?.h24 || '0'),
+      liquidity: parseFloat(pool.reserve_in_usd || '0'),
+      priceChange24h: parseFloat(pool.price_change_percentage?.h24 || '0'),
+    };
+  } catch (e) {
+    console.error('[Tokens] GeckoTerminal pool fetch failed:', e);
+    return {};
+  }
+}
+
+/** Fetch holder count + honeypot status from GeckoTerminal info endpoint */
+async function fetchGeckoHolderData(chain: string, contractAddress: string): Promise<{ holders: number }> {
+  const network = GECKO_NETWORK[chain] || chain;
+  try {
+    const res = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${contractAddress}/info`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return { holders: 0 };
+
+    const json = await res.json() as {
+      data?: {
+        attributes?: {
+          holders?: { count?: number | null };
+        };
       };
     };
-  };
 
-  const attrs = json.data?.attributes;
-  if (!attrs) throw new Error('Token not found on GeckoTerminal');
+    return { holders: json.data?.attributes?.holders?.count || 0 };
+  } catch (e) {
+    console.error('[Tokens] GeckoTerminal holder fetch failed:', e);
+    return { holders: 0 };
+  }
+}
 
-  return {
-    priceUsd: parseFloat(attrs.price_usd || '0'),
-    marketCap: parseFloat(attrs.fdv_usd || attrs.market_cap_usd || '0'),
-    holders: 0,
-    volume24h: parseFloat(attrs.volume_usd?.h24 || '0'),
-    liquidity: parseFloat(attrs.total_reserve_in_usd || '0'),
-    priceChange24h: 0,
-  };
+/** Fetch token-level data from GeckoTerminal (fallback when pool data unavailable) */
+async function fetchGeckoTokenData(chain: string, contractAddress: string): Promise<Partial<TokenData>> {
+  const network = GECKO_NETWORK[chain] || chain;
+  try {
+    const res = await fetch(
+      `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${contractAddress}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return {};
+
+    const json = await res.json() as {
+      data?: {
+        attributes?: {
+          price_usd?: string | null;
+          fdv_usd?: string | null;
+          market_cap_usd?: string | null;
+          total_reserve_in_usd?: string | null;
+          volume_usd?: { h24?: string | null };
+        };
+      };
+    };
+
+    const attrs = json.data?.attributes;
+    if (!attrs) return {};
+
+    return {
+      priceUsd: parseFloat(attrs.price_usd || '0'),
+      marketCap: parseFloat(attrs.fdv_usd || attrs.market_cap_usd || '0'),
+      volume24h: parseFloat(attrs.volume_usd?.h24 || '0'),
+      liquidity: parseFloat(attrs.total_reserve_in_usd || '0'),
+    };
+  } catch (e) {
+    console.error('[Tokens] GeckoTerminal token fetch failed:', e);
+    return {};
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch: pick the right source based on pool config
+// Dispatch: aggregate data from multiple sources
 // ---------------------------------------------------------------------------
+
+/** Pick the best non-zero value */
+function best(a: number | undefined, b: number | undefined): number {
+  return (a && a > 0) ? a : (b && b > 0) ? b : 0;
+}
 
 export async function fetchTokenData(
   chain: string,
@@ -445,25 +517,51 @@ export async function fetchTokenData(
   const key = `${chain}:${contractAddress}`.toLowerCase();
   const pool = KNOWN_POOLS[key];
 
-  try {
-    if (pool?.dexType === 'uniswap_v4') {
-      return await fetchFromUniswapV4(pool.poolAddress, contractAddress, decimals, pool.isToken0);
-    }
+  // Collect data from all sources in parallel
+  const sources: Promise<Partial<TokenData>>[] = [];
 
-    // Solana + unknown pools: GeckoTerminal
-    return await fetchFromGeckoTerminal(chain, contractAddress);
-  } catch (error) {
-    console.error(`[Tokens] Primary fetch failed for ${chain}:${contractAddress}:`, error);
-    // If direct DEX read failed, try GeckoTerminal as fallback
-    if (pool) {
-      try {
-        return await fetchFromGeckoTerminal(chain, contractAddress);
-      } catch (fallbackError) {
-        console.error(`[Tokens] Fallback also failed:`, fallbackError);
-      }
-    }
-    return { priceUsd: 0, marketCap: 0, holders: 0, volume24h: 0, liquidity: 0, priceChange24h: 0 };
+  // Source 1: Direct DEX read (if known pool)
+  if (pool?.dexType === 'uniswap_v4') {
+    sources.push(
+      fetchFromUniswapV4(pool.poolAddress, contractAddress, decimals, pool.isToken0)
+        .catch(e => { console.error('[Tokens] Uniswap V4 read failed:', e); return {}; })
+    );
   }
+
+  // Source 2: GeckoTerminal pool data (price, volume, liquidity, price change)
+  sources.push(fetchGeckoPoolData(chain, contractAddress));
+
+  // Source 3: GeckoTerminal holder data
+  sources.push(fetchGeckoHolderData(chain, contractAddress));
+
+  // Source 4: GeckoTerminal token-level data (fallback for price/mcap)
+  sources.push(fetchGeckoTokenData(chain, contractAddress));
+
+  const results = await Promise.all(sources);
+
+  // Merge: prefer direct DEX read for price/mcap, GeckoTerminal for everything else
+  const merged: TokenData = {
+    priceUsd: 0,
+    marketCap: 0,
+    holders: 0,
+    volume24h: 0,
+    liquidity: 0,
+    priceChange24h: 0,
+  };
+
+  for (const r of results) {
+    merged.priceUsd = best(merged.priceUsd, r.priceUsd);
+    merged.marketCap = best(merged.marketCap, r.marketCap);
+    merged.holders = best(merged.holders, r.holders);
+    merged.volume24h = best(merged.volume24h, r.volume24h);
+    merged.liquidity = best(merged.liquidity, r.liquidity);
+    // For price change, 0 is valid (no change), so only override if we have no data yet
+    if (merged.priceChange24h === 0 && r.priceChange24h !== undefined && r.priceChange24h !== 0) {
+      merged.priceChange24h = r.priceChange24h;
+    }
+  }
+
+  return merged;
 }
 
 /** Record a snapshot for a token */
@@ -490,7 +588,7 @@ export async function recordTokenSnapshot(
     decimals = token.decimals;
   }
 
-  const data = await fetchTokenData(chain, contractAddress, decimals ?? 18);
+  const data = await fetchTokenData(chain!, contractAddress!, decimals ?? 18);
 
   await supabase.from(TABLES.TOKEN_SNAPSHOTS).insert({
     token_id: tokenId,

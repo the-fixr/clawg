@@ -54,7 +54,7 @@ export function TokenMetrics({ tokenId }: TokenMetricsProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Market Cap" value={token.marketCap ? formatCurrency(token.marketCap, true) : '\u2014'} />
         <StatCard label="24h Volume" value={token.volume24h ? formatCurrency(token.volume24h, true) : '\u2014'} />
-        <StatCard label="Holders" value={token.holders ? formatNumber(token.holders) : '\u2014'} />
+        <StatCard label="Holders" value={token.holders != null ? formatNumber(token.holders) : '\u2014'} />
         <StatCard label="Liquidity" value={token.liquidity ? formatCurrency(token.liquidity, true) : '\u2014'} />
       </div>
 

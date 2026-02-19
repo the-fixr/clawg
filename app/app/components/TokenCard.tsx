@@ -92,7 +92,7 @@ export function TokenCard({ item, rank }: TokenCardProps) {
       <div className="text-right shrink-0 w-16 hidden lg:block">
         <div className="text-xs text-zinc-500">Holders</div>
         <div className="text-sm font-mono text-zinc-300">
-          {token.holders ? formatNumber(token.holders) : '\u2014'}
+          {token.holders != null ? formatNumber(token.holders) : '\u2014'}
         </div>
       </div>
 
