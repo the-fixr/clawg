@@ -22,9 +22,9 @@ export const ERC8004_CONTRACTS = {
     identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as Address,
     reputationRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
-  // Base Mainnet (when deployed)
+  // Base Mainnet (same registry address as mainnet)
   base: {
-    identityRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
+    identityRegistry: '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as Address,
     reputationRegistry: '0x0000000000000000000000000000000000000000' as Address, // TBD
   },
   // Base Sepolia (testnet)

@@ -876,12 +876,14 @@ app.post('/api/cron/snapshots', async (c) => {
   const tokens = await getAllLinkedTokens(c.env);
   let updated = 0;
 
-  for (const token of tokens) {
+  for (let i = 0; i < tokens.length; i++) {
+    // Rate-limit: 3s between GeckoTerminal calls to avoid 429
+    if (i > 0) await new Promise(r => setTimeout(r, 3000));
     try {
-      await recordTokenSnapshot(c.env, token.id, token.chain, token.contract_address);
+      await recordTokenSnapshot(c.env, tokens[i].id, tokens[i].chain, tokens[i].contract_address);
       updated++;
     } catch (error) {
-      console.error(`Snapshot failed for ${token.id}:`, error);
+      console.error(`Snapshot failed for ${tokens[i].id}:`, error);
     }
   }
 
@@ -917,11 +919,12 @@ export default {
     // Every 15 minutes: update token snapshots
     const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
     const tokens = await getAllLinkedTokens(env);
-    for (const token of tokens) {
+    for (let i = 0; i < tokens.length; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 3000));
       try {
-        await recordTokenSnapshot(env, token.id, token.chain, token.contract_address);
+        await recordTokenSnapshot(env, tokens[i].id, tokens[i].chain, tokens[i].contract_address);
       } catch (e) {
-        console.error(`[Cron] Snapshot error for ${token.id}:`, e);
+        console.error(`[Cron] Snapshot error for ${tokens[i].id}:`, e);
       }
     }
 

@@ -222,59 +222,47 @@ interface TokenData {
   priceChange24h: number;
 }
 
-/** Fetch token data from DexScreener (EVM chains) */
-async function fetchFromDexScreener(contractAddress: string): Promise<TokenData> {
+/** Map chain names to GeckoTerminal network IDs */
+const GECKO_NETWORK: Record<string, string> = {
+  ethereum: 'eth',
+  base: 'base',
+  arbitrum: 'arbitrum',
+  solana: 'solana',
+  monad: 'monad',
+};
+
+/** Fetch token data from GeckoTerminal (all chains) */
+async function fetchFromGeckoTerminal(chain: string, contractAddress: string): Promise<TokenData> {
+  const network = GECKO_NETWORK[chain] || chain;
   const res = await fetch(
-    `https://api.dexscreener.com/latest/dex/tokens/${contractAddress}`,
-    { headers: { 'User-Agent': 'Clawg/1.0' } }
+    `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${contractAddress}`,
+    { headers: { Accept: 'application/json' } }
   );
 
-  if (!res.ok) throw new Error(`DexScreener returned ${res.status}`);
+  if (!res.ok) throw new Error(`GeckoTerminal returned ${res.status}`);
 
-  const data = await res.json() as {
-    pairs?: Array<{
-      priceUsd?: string;
-      fdv?: number;
-      volume?: { h24?: number };
-      liquidity?: { usd?: number };
-      priceChange?: { h24?: number };
-    }>;
+  const json = await res.json() as {
+    data?: {
+      attributes?: {
+        price_usd?: string | null;
+        fdv_usd?: string | null;
+        market_cap_usd?: string | null;
+        total_reserve_in_usd?: string | null;
+        volume_usd?: { h24?: string | null };
+      };
+    };
   };
 
-  const pair = data.pairs?.[0];
-  if (!pair) throw new Error('Token not found on DexScreener');
+  const attrs = json.data?.attributes;
+  if (!attrs) throw new Error('Token not found on GeckoTerminal');
 
   return {
-    priceUsd: parseFloat(pair.priceUsd || '0'),
-    marketCap: pair.fdv || 0,
-    holders: 0, // DexScreener doesn't provide holders
-    volume24h: pair.volume?.h24 || 0,
-    liquidity: pair.liquidity?.usd || 0,
-    priceChange24h: pair.priceChange?.h24 || 0,
-  };
-}
-
-/** Fetch Solana token price from Jupiter */
-async function fetchFromJupiter(mintAddress: string): Promise<TokenData> {
-  const res = await fetch(
-    `https://api.jup.ag/price/v2?ids=${mintAddress}`
-  );
-
-  if (!res.ok) throw new Error(`Jupiter returned ${res.status}`);
-
-  const data = await res.json() as {
-    data?: Record<string, { price?: string }>;
-  };
-
-  const price = parseFloat(data.data?.[mintAddress]?.price || '0');
-
-  return {
-    priceUsd: price,
-    marketCap: 0,
+    priceUsd: parseFloat(attrs.price_usd || '0'),
+    marketCap: parseFloat(attrs.fdv_usd || attrs.market_cap_usd || '0'),
     holders: 0,
-    volume24h: 0,
-    liquidity: 0,
-    priceChange24h: 0,
+    volume24h: parseFloat(attrs.volume_usd?.h24 || '0'),
+    liquidity: parseFloat(attrs.total_reserve_in_usd || '0'),
+    priceChange24h: 0, // GeckoTerminal token endpoint doesn't include price change
   };
 }
 
@@ -284,10 +272,7 @@ export async function fetchTokenData(
   contractAddress: string
 ): Promise<TokenData> {
   try {
-    if (chain === 'solana') {
-      return await fetchFromJupiter(contractAddress);
-    }
-    return await fetchFromDexScreener(contractAddress);
+    return await fetchFromGeckoTerminal(chain, contractAddress);
   } catch (error) {
     console.error(`[Tokens] Failed to fetch data for ${chain}:${contractAddress}:`, error);
     return {
