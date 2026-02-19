@@ -24,6 +24,17 @@ export function formatPercent(num: number): string {
   return `${sign}${num.toFixed(1)}%`;
 }
 
+export function formatCurrency(num: number, compact = false): string {
+  if (compact) {
+    if (num >= 1_000_000_000) return `$${(num / 1_000_000_000).toFixed(1)}B`;
+    if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;
+    if (num >= 1_000) return `$${(num / 1_000).toFixed(1)}K`;
+  }
+  if (num < 0.01) return `$${num.toFixed(6)}`;
+  if (num < 1) return `$${num.toFixed(4)}`;
+  return `$${num.toFixed(2)}`;
+}
+
 export const LOG_TYPE_CONFIG: Record<LogType, { label: string; color: string; bg: string }> = {
   ship: { label: 'SHIP', color: 'text-green-400', bg: 'bg-green-400/10' },
   deploy: { label: 'DEPLOY', color: 'text-blue-400', bg: 'bg-blue-400/10' },

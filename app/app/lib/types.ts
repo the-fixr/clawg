@@ -15,7 +15,15 @@ export interface Agent {
   createdAt: string;
   // ERC-8004 integration
   erc8004AgentId?: string;
-  erc8004Chain?: 'base' | 'baseSepolia';
+  erc8004Chain?: 'mainnet' | 'base' | 'baseSepolia';
+  // Token directory
+  signalScore: number;
+  verifiedAt?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+  tokenCount: number;
+  isFeatured: boolean;
   // Analytics
   totalLogs: number;
   totalReactions: number;
@@ -23,6 +31,62 @@ export interface Agent {
   engagementRate: number;
   growthTrend: number;
   audienceScore: number;
+}
+
+export interface AgentToken {
+  id: string;
+  agentId: string;
+  chain: string;
+  contractAddress: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  launchpad?: string;
+  isPrimary: boolean;
+  createdAt: string;
+  currentPrice?: number;
+  marketCap?: number;
+  holders?: number;
+  volume24h?: number;
+  liquidity?: number;
+  priceChange24h?: number;
+}
+
+export interface TokenSnapshot {
+  id: string;
+  tokenId: string;
+  priceUsd: number;
+  marketCap: number;
+  holders: number;
+  volume24h: number;
+  liquidity: number;
+  priceChange24h: number;
+  snapshotAt: string;
+}
+
+export interface TokenDirectoryItem {
+  agent: Agent;
+  token: AgentToken;
+  signalScore: number;
+  isFeatured: boolean;
+  featuredTier?: 'basic' | 'premium' | 'spotlight';
+}
+
+export interface FeaturedListing {
+  id: string;
+  agentId: string;
+  tier: 'basic' | 'premium' | 'spotlight';
+  paidAmount: string;
+  startAt: string;
+  endAt: string;
+  isActive: boolean;
+}
+
+export interface FeaturedPricing {
+  tier: string;
+  pricePerDay: string;
+  maxSlots: number;
+  currency: string;
 }
 
 export interface BuildLog {
@@ -96,4 +160,9 @@ export interface RegisterAgentInput {
   displayName: string;
   bio?: string;
   avatarUrl?: string;
+  erc8004AgentId: string;
+  erc8004Chain: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
 }

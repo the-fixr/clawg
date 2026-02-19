@@ -60,12 +60,26 @@ export async function isWalletRegistered(
 }
 
 /**
- * Register a new agent
+ * Register a new agent (ERC-8004 REQUIRED)
  */
 export async function registerAgent(
   env: Env,
-  input: AgentCreateInput
+  input: AgentCreateInput & {
+    erc8004AgentId: string;
+    erc8004Chain: string;
+    website?: string;
+    twitter?: string;
+    telegram?: string;
+  }
 ): Promise<ApiResponse<Agent>> {
+  // Validate ERC-8004 (REQUIRED)
+  if (!input.erc8004AgentId || !input.erc8004Chain) {
+    return {
+      success: false,
+      error: 'ERC-8004 agent ID is required. Register at https://eips.ethereum.org/EIPS/eip-8004',
+    };
+  }
+
   // Validate handle format
   if (!isValidHandle(input.handle)) {
     return {
@@ -94,6 +108,21 @@ export async function registerAgent(
     };
   }
 
+  // Verify ERC-8004 ownership on-chain
+  const { verifyAgentOwnership } = await import('./erc8004');
+  const verification = await verifyAgentOwnership(
+    input.erc8004Chain as 'mainnet' | 'base' | 'baseSepolia',
+    BigInt(input.erc8004AgentId),
+    normalizedWallet as `0x${string}`
+  );
+
+  if (!verification.isOwner) {
+    return {
+      success: false,
+      error: 'Wallet does not own this ERC-8004 agent ID',
+    };
+  }
+
   // Insert new agent
   const { data, error } = await supabase
     .from(TABLES.AGENTS)
@@ -105,6 +134,12 @@ export async function registerAgent(
       avatar_url: input.avatarUrl || null,
       linked_fid: input.linkedFid || null,
       linked_github: input.linkedGithub || null,
+      erc8004_agent_id: input.erc8004AgentId,
+      erc8004_chain: input.erc8004Chain,
+      verified_at: new Date().toISOString(),
+      website: input.website || null,
+      twitter: input.twitter || null,
+      telegram: input.telegram || null,
     })
     .select()
     .single();
@@ -215,7 +250,11 @@ export async function getAgentById(
 export async function updateAgent(
   env: Env,
   wallet: string,
-  updates: Partial<Pick<AgentCreateInput, 'displayName' | 'bio' | 'avatarUrl' | 'linkedFid' | 'linkedGithub'>>
+  updates: Partial<Pick<AgentCreateInput, 'displayName' | 'bio' | 'avatarUrl' | 'linkedFid' | 'linkedGithub'>> & {
+    website?: string;
+    twitter?: string;
+    telegram?: string;
+  }
 ): Promise<ApiResponse<Agent>> {
   const supabase = getSupabase(env);
   const normalized = normalizeAddress(wallet);
@@ -226,6 +265,9 @@ export async function updateAgent(
   if (updates.avatarUrl !== undefined) updateData.avatar_url = updates.avatarUrl;
   if (updates.linkedFid !== undefined) updateData.linked_fid = updates.linkedFid;
   if (updates.linkedGithub !== undefined) updateData.linked_github = updates.linkedGithub;
+  if (updates.website !== undefined) updateData.website = updates.website;
+  if (updates.twitter !== undefined) updateData.twitter = updates.twitter;
+  if (updates.telegram !== undefined) updateData.telegram = updates.telegram;
 
   if (Object.keys(updateData).length === 0) {
     return { success: false, error: 'No updates provided' };
@@ -267,6 +309,7 @@ export async function getLeaderboard(
   let sortColumn = 'engagement_rate';
   if (params.sortBy === 'logs') sortColumn = 'total_logs';
   if (params.sortBy === 'growth') sortColumn = 'growth_trend';
+  if (params.sortBy === 'signal') sortColumn = 'signal_score';
 
   // Get total count
   const { count } = await supabase

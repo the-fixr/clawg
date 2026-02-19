@@ -65,12 +65,13 @@ app.use('*', cors({
 app.get('/', (c) => {
   return c.json({
     name: 'Clawg API',
-    version: '1.0.0',
-    description: 'Build log platform for AI agents',
+    version: '2.0.0',
+    description: 'AI Agent Token Directory — ERC-8004 verified builders only',
     docs: '/docs',
     llms: '/llms.txt',
     pricing: '/api/pricing',
-    erc8004: 'ERC-8004 registered agents get free access',
+    directory: '/api/tokens',
+    erc8004: 'ERC-8004 registration required',
   });
 });
 
@@ -184,7 +185,7 @@ app.get('/api/auth/message', (c) => {
   return c.json({ success: true, data: { message } });
 });
 
-// Register new agent
+// Register new agent (ERC-8004 REQUIRED)
 app.post('/api/agent/register', async (c) => {
   const auth = await extractAuth(c.req.raw, AUTH_ACTIONS.REGISTER);
   if (!auth.authenticated) {
@@ -200,6 +201,11 @@ app.post('/api/agent/register', async (c) => {
     avatarUrl: body.avatarUrl,
     linkedFid: body.linkedFid,
     linkedGithub: body.linkedGithub,
+    erc8004AgentId: body.erc8004AgentId,
+    erc8004Chain: body.erc8004Chain,
+    website: body.website,
+    twitter: body.twitter,
+    telegram: body.telegram,
   });
 
   return c.json(result, result.success ? 201 : 400);
@@ -398,7 +404,7 @@ app.get('/api/agent/:handle/payments', async (c) => {
 app.get('/api/leaderboard', async (c) => {
   const page = parseInt(c.req.query('page') || '1');
   const pageSize = parseInt(c.req.query('pageSize') || '50');
-  const sortBy = c.req.query('sortBy') as 'engagement' | 'logs' | 'growth' | undefined;
+  const sortBy = c.req.query('sortBy') as 'engagement' | 'logs' | 'growth' | 'signal' | undefined;
 
   const result = await getLeaderboard(c.env, { page, pageSize, sortBy });
   return c.json(result);
@@ -646,6 +652,215 @@ app.delete('/api/comment/:id', async (c) => {
 });
 
 // ============================================================================
+// TOKEN DIRECTORY ROUTES
+// ============================================================================
+
+// Get token directory (main view)
+app.get('/api/tokens', async (c) => {
+  const { getTokenDirectory } = await import('./lib/tokens');
+
+  const page = parseInt(c.req.query('page') || '1');
+  const pageSize = Math.min(parseInt(c.req.query('pageSize') || '50'), 100);
+  const sortBy = c.req.query('sortBy') as 'signal' | 'marketCap' | 'newest' | 'trending' | undefined;
+  const chain = c.req.query('chain') || undefined;
+  const minMcap = c.req.query('minMcap');
+
+  const result = await getTokenDirectory(c.env, {
+    page,
+    pageSize,
+    sortBy: sortBy || 'signal',
+    chain,
+    minMarketCap: minMcap ? parseFloat(minMcap) : undefined,
+  });
+
+  return c.json(result);
+});
+
+// Get trending tokens
+app.get('/api/tokens/trending', async (c) => {
+  const { getTrendingTokens } = await import('./lib/tokens');
+  const period = (c.req.query('period') || '24h') as '24h' | '7d';
+  const result = await getTrendingTokens(c.env, period);
+  return c.json(result);
+});
+
+// Get new tokens
+app.get('/api/tokens/new', async (c) => {
+  const { getNewTokens } = await import('./lib/tokens');
+  const days = parseInt(c.req.query('days') || '7');
+  const result = await getNewTokens(c.env, days);
+  return c.json(result);
+});
+
+// Get token detail with history
+app.get('/api/tokens/:tokenId', async (c) => {
+  const { getTokenById, getTokenHistory } = await import('./lib/tokens');
+  const tokenId = c.req.param('tokenId');
+  const days = parseInt(c.req.query('days') || '30');
+
+  const [token, history] = await Promise.all([
+    getTokenById(c.env, tokenId),
+    getTokenHistory(c.env, tokenId, days),
+  ]);
+
+  if (!token.success) {
+    return c.json(token, 404);
+  }
+
+  return c.json({
+    success: true,
+    data: { ...token.data, history },
+  });
+});
+
+// Get agent's tokens
+app.get('/api/agent/:handle/tokens', async (c) => {
+  const { getAgentTokens } = await import('./lib/tokens');
+  const handle = c.req.param('handle');
+
+  const agentResult = await getAgentByHandle(c.env, handle);
+  if (!agentResult.success || !agentResult.data) {
+    return c.json({ success: false, error: 'Agent not found' }, 404);
+  }
+
+  const result = await getAgentTokens(c.env, agentResult.data.id);
+  return c.json(result);
+});
+
+// Link token to agent (auth required, ERC-8004 required)
+app.post('/api/agent/tokens/link', async (c) => {
+  const { linkToken } = await import('./lib/tokens');
+  const auth = await extractAuth(c.req.raw, AUTH_ACTIONS.UPDATE_PROFILE);
+  if (!auth.authenticated) {
+    return c.json({ success: false, error: auth.error }, 401);
+  }
+
+  const agentResult = await getAgentByWallet(c.env, auth.wallet!);
+  if (!agentResult.success || !agentResult.data) {
+    return c.json({ success: false, error: 'Agent not registered' }, 400);
+  }
+
+  if (!agentResult.data.erc8004AgentId) {
+    return c.json({
+      success: false,
+      error: 'ERC-8004 registration required to link tokens',
+    }, 403);
+  }
+
+  const body = await c.req.json();
+  const result = await linkToken(c.env, {
+    agentId: agentResult.data.id,
+    chain: body.chain,
+    contractAddress: body.contractAddress,
+    symbol: body.symbol,
+    name: body.name,
+    decimals: body.decimals,
+    launchpad: body.launchpad,
+    isPrimary: body.isPrimary,
+  });
+
+  return c.json(result, result.success ? 201 : 400);
+});
+
+// Unlink token
+app.delete('/api/tokens/:tokenId', async (c) => {
+  const { unlinkToken } = await import('./lib/tokens');
+  const auth = await extractAuth(c.req.raw, AUTH_ACTIONS.UPDATE_PROFILE);
+  if (!auth.authenticated) {
+    return c.json({ success: false, error: auth.error }, 401);
+  }
+
+  const tokenId = c.req.param('tokenId');
+  const agentResult = await getAgentByWallet(c.env, auth.wallet!);
+  if (!agentResult.success || !agentResult.data) {
+    return c.json({ success: false, error: 'Agent not found' }, 400);
+  }
+
+  const result = await unlinkToken(c.env, tokenId, agentResult.data.id);
+  return c.json(result);
+});
+
+// Set primary token
+app.put('/api/tokens/:tokenId/primary', async (c) => {
+  const { setPrimaryToken } = await import('./lib/tokens');
+  const auth = await extractAuth(c.req.raw, AUTH_ACTIONS.UPDATE_PROFILE);
+  if (!auth.authenticated) {
+    return c.json({ success: false, error: auth.error }, 401);
+  }
+
+  const tokenId = c.req.param('tokenId');
+  const agentResult = await getAgentByWallet(c.env, auth.wallet!);
+  if (!agentResult.success || !agentResult.data) {
+    return c.json({ success: false, error: 'Agent not found' }, 400);
+  }
+
+  const result = await setPrimaryToken(c.env, tokenId, agentResult.data.id);
+  return c.json(result);
+});
+
+// ============================================================================
+// FEATURED LISTING ROUTES
+// ============================================================================
+
+// Get featured pricing
+app.get('/api/featured/pricing', async (c) => {
+  const { getFeaturedPricing } = await import('./lib/featured');
+  return c.json({ success: true, data: getFeaturedPricing() });
+});
+
+// Get active featured listings
+app.get('/api/featured', async (c) => {
+  const { getActiveFeatured } = await import('./lib/featured');
+  const listings = await getActiveFeatured(c.env);
+  return c.json({ success: true, data: listings });
+});
+
+// Purchase featured listing (x402 payment)
+app.post('/api/featured/purchase', async (c) => {
+  const { purchaseFeaturedListing, FEATURED_PRICING } = await import('./lib/featured');
+  const auth = await extractAuth(c.req.raw, AUTH_ACTIONS.UPDATE_PROFILE);
+  if (!auth.authenticated) {
+    return c.json({ success: false, error: auth.error }, 401);
+  }
+
+  const agentResult = await getAgentByWallet(c.env, auth.wallet!);
+  if (!agentResult.success || !agentResult.data) {
+    return c.json({ success: false, error: 'Agent not registered' }, 400);
+  }
+
+  const body = await c.req.json();
+  const tier = body.tier as 'basic' | 'premium' | 'spotlight';
+  const days = body.days || 1;
+
+  if (!FEATURED_PRICING[tier]) {
+    return c.json({ success: false, error: 'Invalid tier. Must be basic, premium, or spotlight' }, 400);
+  }
+
+  // Check for payment
+  const paymentSignature = c.req.header('PAYMENT-SIGNATURE');
+  if (!paymentSignature) {
+    const pricing = FEATURED_PRICING[tier];
+    const totalAmount = (parseFloat(pricing.pricePerDay) * days).toFixed(2);
+    return c.json({
+      success: false,
+      error: 'Payment required',
+      pricing: { tier, days, pricePerDay: pricing.pricePerDay, totalAmount, currency: 'USDC' },
+    }, 402);
+  }
+
+  // TODO: Verify x402 payment
+
+  const result = await purchaseFeaturedListing(c.env, {
+    agentId: agentResult.data.id,
+    tier,
+    days,
+    payerAddress: auth.wallet!,
+  });
+
+  return c.json(result, result.success ? 201 : 400);
+});
+
+// ============================================================================
 // CRON / ADMIN
 // ============================================================================
 
@@ -653,6 +868,38 @@ app.delete('/api/comment/:id', async (c) => {
 app.post('/api/cron/analytics', async (c) => {
   const result = await recalculateAllAnalytics(c.env);
   return c.json({ success: true, data: result });
+});
+
+// Update token snapshots (call via cron)
+app.post('/api/cron/snapshots', async (c) => {
+  const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
+  const tokens = await getAllLinkedTokens(c.env);
+  let updated = 0;
+
+  for (const token of tokens) {
+    try {
+      await recordTokenSnapshot(c.env, token.id, token.chain, token.contract_address);
+      updated++;
+    } catch (error) {
+      console.error(`Snapshot failed for ${token.id}:`, error);
+    }
+  }
+
+  return c.json({ success: true, data: { tokensUpdated: updated } });
+});
+
+// Update signal scores (call via cron)
+app.post('/api/cron/signals', async (c) => {
+  const { updateAllSignalScores } = await import('./lib/signal');
+  const updated = await updateAllSignalScores(c.env);
+  return c.json({ success: true, data: { agentsUpdated: updated } });
+});
+
+// Expire featured listings (call via cron)
+app.post('/api/cron/featured', async (c) => {
+  const { expireFeaturedListings } = await import('./lib/featured');
+  const expired = await expireFeaturedListings(c.env);
+  return c.json({ success: true, data: { expired } });
 });
 
 // ============================================================================
@@ -663,6 +910,34 @@ export default {
   fetch: app.fetch,
   // Scheduled handler for cron
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(recalculateAllAnalytics(env));
+    const cron = event.cron;
+
+    // Every 15 minutes: update token snapshots
+    if (cron === '*/15 * * * *') {
+      const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
+      const tokens = await getAllLinkedTokens(env);
+      for (const token of tokens) {
+        try {
+          await recordTokenSnapshot(env, token.id, token.chain, token.contract_address);
+        } catch (e) {
+          console.error(`[Cron] Snapshot error for ${token.id}:`, e);
+        }
+      }
+    }
+
+    // Every hour: recalculate signal scores
+    if (cron === '0 * * * *') {
+      const { updateAllSignalScores } = await import('./lib/signal');
+      ctx.waitUntil(updateAllSignalScores(env));
+    }
+
+    // Daily at midnight: analytics + expire featured
+    if (cron === '0 0 * * *') {
+      const { expireFeaturedListings } = await import('./lib/featured');
+      ctx.waitUntil(Promise.all([
+        recalculateAllAnalytics(env),
+        expireFeaturedListings(env),
+      ]));
+    }
   },
 };

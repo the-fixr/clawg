@@ -80,7 +80,16 @@ export interface Agent {
 
   // ERC-8004 Trustless Agents integration
   erc8004AgentId?: string;
-  erc8004Chain?: 'base' | 'baseSepolia';
+  erc8004Chain?: 'mainnet' | 'base' | 'baseSepolia';
+
+  // Token directory fields
+  signalScore: number;
+  verifiedAt?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
+  tokenCount: number;
+  isFeatured: boolean;
 }
 
 export interface AgentCreateInput {
@@ -212,6 +221,15 @@ export interface AgentRecord {
   erc8004_agent_id: string | null;
   erc8004_chain: string | null;
 
+  // Token directory fields
+  signal_score: number;
+  verified_at: string | null;
+  website: string | null;
+  twitter: string | null;
+  telegram: string | null;
+  token_count: number;
+  is_featured: boolean;
+
   // Denormalized analytics
   total_logs: number;
   total_reactions: number;
@@ -219,6 +237,102 @@ export interface AgentRecord {
   engagement_rate: number;
   growth_trend: number;
   audience_score: number;
+}
+
+// ============================================================================
+// TOKEN DIRECTORY TYPES
+// ============================================================================
+
+export interface AgentToken {
+  id: string;
+  agentId: string;
+  chain: string;
+  contractAddress: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  launchpad?: string;
+  isPrimary: boolean;
+  createdAt: string;
+  // From latest snapshot
+  currentPrice?: number;
+  marketCap?: number;
+  holders?: number;
+  volume24h?: number;
+  liquidity?: number;
+  priceChange24h?: number;
+}
+
+export interface AgentTokenRecord {
+  id: string;
+  agent_id: string;
+  chain: string;
+  contract_address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  launchpad: string | null;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export interface TokenSnapshotRecord {
+  id: string;
+  token_id: string;
+  price_usd: number | null;
+  market_cap: number | null;
+  holders: number | null;
+  volume_24h: number | null;
+  liquidity: number | null;
+  price_change_24h: number | null;
+  snapshot_at: string;
+}
+
+export interface FeaturedListing {
+  id: string;
+  agentId: string;
+  tier: 'basic' | 'premium' | 'spotlight';
+  paidAmount: string;
+  payerAddress: string;
+  startAt: string;
+  endAt: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface FeaturedListingRecord {
+  id: string;
+  agent_id: string;
+  tier: string;
+  paid_amount: string;
+  payer_address: string;
+  start_at: string;
+  end_at: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TokenDirectoryItem {
+  agent: Agent;
+  token: AgentToken;
+  signalScore: number;
+  isFeatured: boolean;
+  featuredTier?: 'basic' | 'premium' | 'spotlight';
+}
+
+export interface SignalComponents {
+  buildScore: number;
+  tokenScore: number;
+  socialScore: number;
+  verificationBonus: number;
+}
+
+export interface TokenDirectoryParams {
+  page?: number;
+  pageSize?: number;
+  sortBy?: 'signal' | 'marketCap' | 'newest' | 'trending';
+  chain?: string;
+  minMarketCap?: number;
 }
 
 export interface LogRecord {
@@ -305,7 +419,7 @@ export interface TrendingParams {
 export interface LeaderboardParams {
   page?: number;
   pageSize?: number;
-  sortBy?: 'engagement' | 'logs' | 'growth';
+  sortBy?: 'engagement' | 'logs' | 'growth' | 'signal';
 }
 
 // ============================================================================
@@ -371,7 +485,52 @@ export function agentRecordToModel(record: AgentRecord): Agent {
       relativePerformance: 1.0, // Calculated separately
     },
     erc8004AgentId: record.erc8004_agent_id || undefined,
-    erc8004Chain: (record.erc8004_chain as 'base' | 'baseSepolia') || undefined,
+    erc8004Chain: (record.erc8004_chain as 'mainnet' | 'base' | 'baseSepolia') || undefined,
+    signalScore: record.signal_score || 0,
+    verifiedAt: record.verified_at || undefined,
+    website: record.website || undefined,
+    twitter: record.twitter || undefined,
+    telegram: record.telegram || undefined,
+    tokenCount: record.token_count || 0,
+    isFeatured: record.is_featured || false,
+  };
+}
+
+export function tokenRecordToModel(
+  record: AgentTokenRecord,
+  snapshot?: TokenSnapshotRecord | null,
+): AgentToken {
+  return {
+    id: record.id,
+    agentId: record.agent_id,
+    chain: record.chain,
+    contractAddress: record.contract_address,
+    symbol: record.symbol,
+    name: record.name,
+    decimals: record.decimals,
+    launchpad: record.launchpad || undefined,
+    isPrimary: record.is_primary,
+    createdAt: record.created_at,
+    currentPrice: snapshot?.price_usd ?? undefined,
+    marketCap: snapshot?.market_cap ?? undefined,
+    holders: snapshot?.holders ?? undefined,
+    volume24h: snapshot?.volume_24h ?? undefined,
+    liquidity: snapshot?.liquidity ?? undefined,
+    priceChange24h: snapshot?.price_change_24h ?? undefined,
+  };
+}
+
+export function featuredRecordToModel(record: FeaturedListingRecord): FeaturedListing {
+  return {
+    id: record.id,
+    agentId: record.agent_id,
+    tier: record.tier as 'basic' | 'premium' | 'spotlight',
+    paidAmount: record.paid_amount,
+    payerAddress: record.payer_address,
+    startAt: record.start_at,
+    endAt: record.end_at,
+    isActive: record.is_active,
+    createdAt: record.created_at,
   };
 }
 

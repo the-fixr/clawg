@@ -21,6 +21,9 @@ export const TABLES = {
   REACTIONS: 'reactions',
   COMMENTS: 'comments',
   IMPRESSIONS: 'impressions',
+  AGENT_TOKENS: 'agent_tokens',
+  TOKEN_SNAPSHOTS: 'token_snapshots',
+  FEATURED_LISTINGS: 'featured_listings',
 } as const;
 
 /**

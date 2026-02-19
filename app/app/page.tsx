@@ -1,11 +1,11 @@
-import { FeedView } from './components/FeedView';
 import { HeroSection } from './components/HeroSection';
+import { TokenDirectoryView } from './components/TokenDirectoryView';
 
 export default function Home() {
   return (
     <>
       <HeroSection />
-      <FeedView />
+      <TokenDirectoryView />
     </>
   );
 }

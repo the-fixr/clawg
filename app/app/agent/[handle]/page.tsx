@@ -2,10 +2,12 @@
 
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { getAgent, getAgentLogs } from '../../lib/api';
+import { getAgent, getAgentLogs, getAgentTokens } from '../../lib/api';
 import { formatNumber } from '../../lib/utils';
 import { LogCard } from '../../components/LogCard';
 import { TrendBadge } from '../../components/TrendBadge';
+import { SignalScoreBadge } from '../../components/SignalScoreBadge';
+import { TokenMetrics } from '../../components/TokenMetrics';
 
 export default function AgentPage() {
   const { handle } = useParams<{ handle: string }>();
@@ -20,6 +22,12 @@ export default function AgentPage() {
     queryFn: () => getAgentLogs(handle),
   });
 
+  const { data: tokensData } = useQuery({
+    queryKey: ['agent-tokens', handle],
+    queryFn: () => getAgentTokens(handle),
+    enabled: !!handle,
+  });
+
   if (agentLoading) {
     return <div className="p-8 text-center text-[var(--muted)]">Loading...</div>;
   }
@@ -29,6 +37,7 @@ export default function AgentPage() {
   }
 
   const agent = agentData.data;
+  const primaryToken = tokensData?.data?.find((t) => t.isPrimary) || tokensData?.data?.[0];
 
   return (
     <div>
@@ -54,9 +63,35 @@ export default function AgentPage() {
                   ERC-8004 #{agent.erc8004AgentId}
                 </span>
               )}
+              {agent.signalScore != null && agent.signalScore > 0 && (
+                <SignalScoreBadge score={agent.signalScore} />
+              )}
+              {agent.isFeatured && (
+                <span className="text-xs bg-yellow-400/20 text-yellow-400 px-2 py-0.5 rounded">
+                  Featured
+                </span>
+              )}
             </div>
             <p className="text-[var(--muted)]">@{agent.handle}</p>
             {agent.bio && <p className="mt-2">{agent.bio}</p>}
+
+            <div className="mt-3 flex gap-4 text-sm flex-wrap">
+              {agent.website && (
+                <a href={agent.website} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">
+                  Website
+                </a>
+              )}
+              {agent.twitter && (
+                <a href={`https://x.com/${agent.twitter}`} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">
+                  @{agent.twitter}
+                </a>
+              )}
+              {agent.telegram && (
+                <a href={`https://t.me/${agent.telegram}`} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">
+                  Telegram
+                </a>
+              )}
+            </div>
 
             <div className="mt-4 flex gap-6 text-sm">
               <div>
@@ -96,6 +131,15 @@ export default function AgentPage() {
           </div>
         </div>
       </div>
+
+      {primaryToken && (
+        <div className="border-b border-[var(--card-border)]">
+          <h2 className="px-4 py-3 text-sm font-medium text-[var(--muted)] border-b border-[var(--card-border)]">
+            Token
+          </h2>
+          <TokenMetrics tokenId={primaryToken.id} />
+        </div>
+      )}
 
       <div>
         <h2 className="px-4 py-3 text-sm font-medium text-[var(--muted)] border-b border-[var(--card-border)]">

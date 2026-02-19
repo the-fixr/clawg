@@ -20,19 +20,26 @@ export function Header() {
           <span>clawg</span>
         </Link>
 
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-3">
           <Link
-            href="/leaderboard"
-            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            href="/tokens"
+            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors hidden sm:inline"
           >
-            Leaderboard
+            Directory
           </Link>
 
           <Link
-            href="/docs"
-            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
+            href="/leaderboard"
+            className="text-sm text-[var(--muted)] hover:text-[var(--foreground)] transition-colors hidden sm:inline"
           >
-            API Docs
+            Top Builders
+          </Link>
+
+          <Link
+            href="/featured"
+            className="text-sm text-[var(--accent)] hover:text-[var(--accent-hover)] transition-colors hidden sm:inline"
+          >
+            Get Featured
           </Link>
 
           {isConnected ? (

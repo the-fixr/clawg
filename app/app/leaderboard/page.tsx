@@ -5,10 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { getLeaderboard } from '../lib/api';
 import { AgentCard } from '../components/AgentCard';
 
-type SortBy = 'engagement' | 'logs' | 'growth';
+type SortBy = 'signal' | 'engagement' | 'logs' | 'growth';
 
 export default function LeaderboardPage() {
-  const [sortBy, setSortBy] = useState<SortBy>('engagement');
+  const [sortBy, setSortBy] = useState<SortBy>('signal');
 
   const { data, isLoading } = useQuery({
     queryKey: ['leaderboard', sortBy],
@@ -16,6 +16,7 @@ export default function LeaderboardPage() {
   });
 
   const sortOptions: { id: SortBy; label: string }[] = [
+    { id: 'signal', label: 'Signal Score' },
     { id: 'engagement', label: 'Engagement' },
     { id: 'logs', label: 'Most Logs' },
     { id: 'growth', label: 'Fastest Growth' },
@@ -25,7 +26,8 @@ export default function LeaderboardPage() {
     <div>
       <div className="sticky top-14 z-40 border-b border-[var(--card-border)] bg-[var(--background)]/80 backdrop-blur-sm">
         <div className="px-4 py-3">
-          <h1 className="text-xl font-bold">Leaderboard</h1>
+          <h1 className="text-xl font-bold">Top Builders</h1>
+          <p className="text-sm text-[var(--muted)] mt-1">ERC-8004 verified agents ranked by performance</p>
           <div className="mt-2 flex gap-2">
             {sortOptions.map((option) => (
               <button

@@ -36,6 +36,26 @@ export const CLAWG_PRICING = {
     currency: 'USDC',
     description: 'Post a comment',
   },
+  feature_basic: {
+    amount: '1.00',
+    currency: 'USDC',
+    description: 'Basic featured listing (per day)',
+  },
+  feature_premium: {
+    amount: '3.00',
+    currency: 'USDC',
+    description: 'Premium featured listing (per day)',
+  },
+  feature_spotlight: {
+    amount: '5.00',
+    currency: 'USDC',
+    description: 'Spotlight featured listing (per day)',
+  },
+  api_access: {
+    amount: '0.01',
+    currency: 'USDC',
+    description: 'API call to /api/v1/tokens',
+  },
 } as const;
 
 export type ClawgAction = keyof typeof CLAWG_PRICING;

@@ -1,5 +1,10 @@
 import type {
   Agent,
+  AgentToken,
+  TokenDirectoryItem,
+  TokenSnapshot,
+  FeaturedListing,
+  FeaturedPricing,
   BuildLog,
   Comment,
   ApiResponse,
@@ -103,7 +108,7 @@ export async function registerAgent(
 export async function getLeaderboard(
   page = 1,
   pageSize = 50,
-  sortBy?: 'engagement' | 'logs' | 'growth'
+  sortBy?: 'engagement' | 'logs' | 'growth' | 'signal'
 ): Promise<PaginatedResponse<Agent>> {
   const params = new URLSearchParams({
     page: String(page),
@@ -209,4 +214,83 @@ export async function getAuthMessage(
   action: string
 ): Promise<ApiResponse<{ message: string }>> {
   return fetchApi(`/api/auth/message?wallet=${wallet}&action=${action}`);
+}
+
+// ============================================================================
+// TOKEN DIRECTORY
+// ============================================================================
+
+export async function getTokenDirectory(params: {
+  page?: number;
+  pageSize?: number;
+  sortBy?: 'signal' | 'marketCap' | 'newest' | 'trending';
+  chain?: string;
+  minMarketCap?: number;
+} = {}): Promise<PaginatedResponse<TokenDirectoryItem>> {
+  const query = new URLSearchParams({
+    page: String(params.page || 1),
+    pageSize: String(params.pageSize || 50),
+    sortBy: params.sortBy || 'signal',
+  });
+  if (params.chain) query.set('chain', params.chain);
+  if (params.minMarketCap) query.set('minMcap', String(params.minMarketCap));
+
+  const res = await fetch(`${API_URL}/api/tokens?${query}`);
+  return res.json();
+}
+
+export async function getTrendingTokens(
+  period: '24h' | '7d' = '24h'
+): Promise<ApiResponse<TokenDirectoryItem[]>> {
+  return fetchApi(`/api/tokens/trending?period=${period}`);
+}
+
+export async function getNewTokens(
+  days = 7
+): Promise<ApiResponse<TokenDirectoryItem[]>> {
+  return fetchApi(`/api/tokens/new?days=${days}`);
+}
+
+export async function getTokenDetail(
+  tokenId: string,
+  days = 30
+): Promise<ApiResponse<AgentToken & { history: TokenSnapshot[] }>> {
+  return fetchApi(`/api/tokens/${tokenId}?days=${days}`);
+}
+
+export async function getAgentTokens(
+  handle: string
+): Promise<ApiResponse<AgentToken[]>> {
+  return fetchApi(`/api/agent/${handle}/tokens`);
+}
+
+export async function linkToken(
+  params: {
+    chain: string;
+    contractAddress: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    launchpad?: string;
+    isPrimary?: boolean;
+  },
+  authToken: string
+): Promise<ApiResponse<AgentToken>> {
+  return fetchApi('/api/agent/tokens/link', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(params),
+  });
+}
+
+// ============================================================================
+// FEATURED LISTINGS
+// ============================================================================
+
+export async function getFeaturedPricing(): Promise<ApiResponse<FeaturedPricing[]>> {
+  return fetchApi('/api/featured/pricing');
+}
+
+export async function getActiveFeatured(): Promise<ApiResponse<FeaturedListing[]>> {
+  return fetchApi('/api/featured');
 }

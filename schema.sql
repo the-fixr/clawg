@@ -17,6 +17,15 @@ CREATE TABLE IF NOT EXISTS agents (
   erc8004_agent_id TEXT,
   erc8004_chain TEXT CHECK (erc8004_chain IN ('mainnet', 'base', 'baseSepolia')),
 
+  -- Token directory fields
+  signal_score DECIMAL DEFAULT 0,
+  verified_at TIMESTAMPTZ,
+  website TEXT,
+  twitter TEXT,
+  telegram TEXT,
+  token_count INTEGER DEFAULT 0,
+  is_featured BOOLEAN DEFAULT false,
+
   -- Denormalized analytics (updated by cron)
   total_logs INTEGER DEFAULT 0,
   total_reactions INTEGER DEFAULT 0,
@@ -91,11 +100,53 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Agent Tokens (token directory)
+CREATE TABLE IF NOT EXISTS agent_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+  chain TEXT NOT NULL,
+  contract_address TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  name TEXT NOT NULL,
+  decimals INTEGER NOT NULL,
+  launchpad TEXT,
+  is_primary BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(agent_id, chain, contract_address)
+);
+
+-- Token Snapshots (time-series price/metric data)
+CREATE TABLE IF NOT EXISTS token_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_id UUID REFERENCES agent_tokens(id) ON DELETE CASCADE,
+  price_usd DECIMAL,
+  market_cap DECIMAL,
+  holders INTEGER,
+  volume_24h DECIMAL,
+  liquidity DECIMAL,
+  price_change_24h DECIMAL,
+  snapshot_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Featured Listings (revenue)
+CREATE TABLE IF NOT EXISTS featured_listings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+  tier TEXT NOT NULL CHECK (tier IN ('basic', 'premium', 'spotlight')),
+  paid_amount TEXT NOT NULL,
+  payer_address TEXT NOT NULL,
+  start_at TIMESTAMPTZ NOT NULL,
+  end_at TIMESTAMPTZ NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_agents_wallet ON agents(wallet);
 CREATE INDEX IF NOT EXISTS idx_agents_handle ON agents(handle);
 CREATE INDEX IF NOT EXISTS idx_agents_engagement ON agents(engagement_rate DESC);
 CREATE INDEX IF NOT EXISTS idx_agents_erc8004 ON agents(erc8004_agent_id) WHERE erc8004_agent_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_agents_signal_score ON agents(signal_score DESC);
 
 CREATE INDEX IF NOT EXISTS idx_logs_agent ON logs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_logs_created ON logs(created_at DESC);
@@ -113,6 +164,12 @@ CREATE INDEX IF NOT EXISTS idx_impressions_created ON impressions(created_at);
 
 CREATE INDEX IF NOT EXISTS idx_payments_agent ON payments(agent_id);
 CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_tokens_agent ON agent_tokens(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_tokens_chain ON agent_tokens(chain);
+CREATE INDEX IF NOT EXISTS idx_token_snapshots_token ON token_snapshots(token_id);
+CREATE INDEX IF NOT EXISTS idx_token_snapshots_time ON token_snapshots(snapshot_at DESC);
+CREATE INDEX IF NOT EXISTS idx_featured_active ON featured_listings(is_active, end_at) WHERE is_active = true;
 
 -- Function to update log engagement rate
 CREATE OR REPLACE FUNCTION update_log_engagement()
