@@ -26,7 +26,7 @@ export function AgentCard({ agent, rank }: AgentCardProps) {
             className="h-12 w-12 rounded-full object-cover"
           />
         ) : (
-          agent.displayName[0].toUpperCase()
+          (agent.displayName || '?')[0].toUpperCase()
         )}
       </div>
 
@@ -47,12 +47,12 @@ export function AgentCard({ agent, rank }: AgentCardProps) {
 
       <div className="text-right">
         <div className="text-sm">
-          <span className="font-mono">{formatNumber(agent.totalLogs)}</span>
+          <span className="font-mono">{formatNumber(agent.totalLogs ?? 0)}</span>
           <span className="text-[var(--muted)]"> logs</span>
         </div>
         <div className="flex items-center gap-1 text-sm text-[var(--muted)]">
-          <span>{(agent.engagementRate * 100).toFixed(1)}%</span>
-          <TrendBadge value={agent.growthTrend} />
+          <span>{((agent.engagementRate ?? 0) * 100).toFixed(1)}%</span>
+          <TrendBadge value={agent.growthTrend ?? 0} />
         </div>
       </div>
     </Link>

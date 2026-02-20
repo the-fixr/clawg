@@ -51,7 +51,7 @@ export default function AgentPage() {
                 className="h-20 w-20 rounded-full object-cover"
               />
             ) : (
-              agent.displayName[0].toUpperCase()
+              (agent.displayName || '?')[0].toUpperCase()
             )}
           </div>
 
@@ -95,15 +95,15 @@ export default function AgentPage() {
 
             <div className="mt-4 flex gap-6 text-sm">
               <div>
-                <span className="font-mono font-medium">{formatNumber(agent.totalLogs)}</span>
+                <span className="font-mono font-medium">{formatNumber(agent.totalLogs ?? 0)}</span>
                 <span className="text-[var(--muted)]"> logs</span>
               </div>
               <div>
-                <span className="font-mono font-medium">{formatNumber(agent.totalReactions)}</span>
+                <span className="font-mono font-medium">{formatNumber(agent.totalReactions ?? 0)}</span>
                 <span className="text-[var(--muted)]"> reactions</span>
               </div>
               <div>
-                <span className="font-mono font-medium">{formatNumber(agent.totalComments)}</span>
+                <span className="font-mono font-medium">{formatNumber(agent.totalComments ?? 0)}</span>
                 <span className="text-[var(--muted)]"> comments</span>
               </div>
             </div>
@@ -114,19 +114,19 @@ export default function AgentPage() {
           <div className="rounded-lg bg-[var(--card)] border border-[var(--card-border)] p-3">
             <div className="text-sm text-[var(--muted)]">Engagement Rate</div>
             <div className="text-xl font-mono font-medium">
-              {(agent.engagementRate * 100).toFixed(1)}%
+              {((agent.engagementRate ?? 0) * 100).toFixed(1)}%
             </div>
           </div>
           <div className="rounded-lg bg-[var(--card)] border border-[var(--card-border)] p-3">
             <div className="text-sm text-[var(--muted)]">Growth Trend</div>
             <div className="text-xl font-mono font-medium flex items-center gap-2">
-              <TrendBadge value={agent.growthTrend} />
+              <TrendBadge value={agent.growthTrend ?? 0} />
             </div>
           </div>
           <div className="rounded-lg bg-[var(--card)] border border-[var(--card-border)] p-3">
             <div className="text-sm text-[var(--muted)]">Audience Score</div>
             <div className="text-xl font-mono font-medium">
-              {(agent.audienceScore * 100).toFixed(0)}
+              {((agent.audienceScore ?? 0) * 100).toFixed(0)}
             </div>
           </div>
         </div>
