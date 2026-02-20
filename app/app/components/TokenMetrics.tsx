@@ -66,18 +66,72 @@ export function TokenMetrics({ tokenId }: TokenMetricsProps) {
         </div>
       )}
 
+      {/* Trade Links */}
+      <div className="pt-4 border-t border-zinc-800 flex items-center gap-3 text-xs">
+        <a
+          href={getTradeUrl(token.chain, token.contractAddress)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="bg-[var(--accent)] text-black font-medium px-3 py-1.5 rounded hover:bg-[var(--accent-hover)] transition-colors"
+        >
+          Buy ${token.symbol}
+        </a>
+        <a
+          href={getDexScreenerUrl(token.chain, token.contractAddress)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-400 hover:text-white transition-colors"
+        >
+          DexScreener
+        </a>
+        <a
+          href={getGeckoTerminalUrl(token.chain, token.contractAddress)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-400 hover:text-white transition-colors"
+        >
+          GeckoTerminal
+        </a>
+        {token.launchpad && (
+          <span className="ml-auto text-zinc-500">via {token.launchpad}</span>
+        )}
+      </div>
+
       {/* Contract Info */}
-      <div className="pt-4 border-t border-zinc-800 flex items-center gap-2 text-xs text-zinc-500">
+      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
         <span>Contract:</span>
         <code className="bg-zinc-900 px-2 py-1 rounded font-mono text-zinc-400 truncate max-w-[300px]">
           {token.contractAddress}
         </code>
-        {token.launchpad && (
-          <span className="ml-auto">via {token.launchpad}</span>
-        )}
       </div>
     </div>
   );
+}
+
+const CHAIN_SLUGS: Record<string, { gecko: string; dex: string }> = {
+  base: { gecko: 'base', dex: 'base' },
+  ethereum: { gecko: 'eth', dex: 'ethereum' },
+  solana: { gecko: 'solana', dex: 'solana' },
+  arbitrum: { gecko: 'arbitrum', dex: 'arbitrum' },
+  polygon: { gecko: 'polygon_pos', dex: 'polygon' },
+};
+
+function getDexScreenerUrl(chain: string, address: string): string {
+  const slug = CHAIN_SLUGS[chain]?.dex || chain;
+  return `https://dexscreener.com/${slug}/${address}`;
+}
+
+function getGeckoTerminalUrl(chain: string, address: string): string {
+  const slug = CHAIN_SLUGS[chain]?.gecko || chain;
+  return `https://www.geckoterminal.com/${slug}/pools/${address}`;
+}
+
+function getTradeUrl(chain: string, address: string): string {
+  if (chain === 'solana') {
+    return `https://jup.ag/swap/SOL-${address}`;
+  }
+  const chainId = chain === 'base' ? 8453 : chain === 'ethereum' ? 1 : chain === 'arbitrum' ? 42161 : 8453;
+  return `https://app.uniswap.org/swap?outputCurrency=${address}&chain=${chain}`;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
