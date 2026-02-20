@@ -7,6 +7,9 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
 
+  // Cron authentication
+  CRON_SECRET: string;
+
   // KV Storage (optional caching)
   CLAWG_KV?: KVNamespace;
 }

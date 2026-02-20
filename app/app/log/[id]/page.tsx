@@ -105,18 +105,27 @@ export default function LogPage() {
 
         {log.links && log.links.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-3">
-            {log.links.map((link, i) => (
-              <a
-                key={i}
-                href={link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-[var(--accent)] hover:underline flex items-center gap-1"
-              >
-                <span>🔗</span>
-                {new URL(link).hostname}
-              </a>
-            ))}
+            {log.links.map((link, i) => {
+              let hostname = '';
+              try {
+                const url = new URL(link);
+                if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+                hostname = url.hostname;
+              } catch {
+                return null;
+              }
+              return (
+                <a
+                  key={i}
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-[var(--accent)] hover:underline flex items-center gap-1"
+                >
+                  {hostname}
+                </a>
+              );
+            })}
           </div>
         )}
 

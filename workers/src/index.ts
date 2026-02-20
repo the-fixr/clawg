@@ -51,11 +51,20 @@ import {
 
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS for API access
+// CORS — restrict to known origins
 app.use('*', cors({
-  origin: '*',
+  origin: (origin) => {
+    if (!origin) return 'https://clawg.network';
+    const allowed = [
+      'https://clawg.network',
+      'https://www.clawg.network',
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ];
+    return allowed.includes(origin) ? origin : 'https://clawg.network';
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'PAYMENT-SIGNATURE'],
 }));
 
 // ============================================================================
@@ -136,7 +145,7 @@ app.get('/api/feed/top', async (c) => {
 
 // Search logs
 app.get('/api/feed/search', async (c) => {
-  const query = c.req.query('q') || '';
+  const query = (c.req.query('q') || '').slice(0, 200);
   if (!query) {
     return c.json({ success: false, error: 'Query parameter q is required' });
   }
@@ -412,7 +421,7 @@ app.get('/api/leaderboard', async (c) => {
 
 // Search agents
 app.get('/api/agents/search', async (c) => {
-  const query = c.req.query('q') || '';
+  const query = (c.req.query('q') || '').slice(0, 200);
   if (!query) {
     return c.json({ success: false, error: 'Query parameter q is required' });
   }
@@ -864,15 +873,22 @@ app.post('/api/featured/purchase', async (c) => {
 // CRON / ADMIN
 // ============================================================================
 
+// Cron auth middleware — verify CRON_SECRET
+function verifyCronAuth(c: any): boolean {
+  const secret = c.req.header('X-Cron-Secret') || c.req.query('secret');
+  return !!c.env.CRON_SECRET && secret === c.env.CRON_SECRET;
+}
+
 // Recalculate all analytics (call via cron)
 app.post('/api/cron/analytics', async (c) => {
+  if (!verifyCronAuth(c)) return c.json({ success: false, error: 'Unauthorized' }, 401);
   const result = await recalculateAllAnalytics(c.env);
   return c.json({ success: true, data: result });
 });
 
-
 // Update token snapshots (call via cron)
 app.post('/api/cron/snapshots', async (c) => {
+  if (!verifyCronAuth(c)) return c.json({ success: false, error: 'Unauthorized' }, 401);
   const { getAllLinkedTokens, recordTokenSnapshot } = await import('./lib/tokens');
   const tokens = await getAllLinkedTokens(c.env);
   let updated = 0;
@@ -893,6 +909,7 @@ app.post('/api/cron/snapshots', async (c) => {
 
 // Update signal scores (call via cron)
 app.post('/api/cron/signals', async (c) => {
+  if (!verifyCronAuth(c)) return c.json({ success: false, error: 'Unauthorized' }, 401);
   const { updateAllSignalScores } = await import('./lib/signal');
   const updated = await updateAllSignalScores(c.env);
   return c.json({ success: true, data: { agentsUpdated: updated } });
@@ -900,6 +917,7 @@ app.post('/api/cron/signals', async (c) => {
 
 // Expire featured listings (call via cron)
 app.post('/api/cron/featured', async (c) => {
+  if (!verifyCronAuth(c)) return c.json({ success: false, error: 'Unauthorized' }, 401);
   const { expireFeaturedListings } = await import('./lib/featured');
   const expired = await expireFeaturedListings(c.env);
   return c.json({ success: true, data: { expired } });

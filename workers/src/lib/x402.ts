@@ -106,8 +106,8 @@ export interface VerificationResult {
 // ============================================================================
 
 export const X402_CONFIG = {
-  // Clawg's payment receiving address
-  payToAddress: '0x0000000000000000000000000000000000000000', // TODO: Set Clawg treasury
+  // Clawg's payment receiving address (Fixr treasury)
+  payToAddress: '0xBe2Cc1861341F3b058A3307385BEBa84167b3fa4',
 
   // Supported networks
   networks: ['base', 'base-sepolia'] as const,

@@ -21,6 +21,49 @@ import {
   normalizeHandle,
 } from './types';
 
+// Validation helpers for social fields
+function isValidTwitterHandle(handle: string): boolean {
+  return /^@?[a-zA-Z0-9_]{1,15}$/.test(handle);
+}
+
+function isValidTelegramHandle(handle: string): boolean {
+  return /^@?[a-zA-Z0-9_]{1,32}$/.test(handle);
+}
+
+function isValidWebsiteUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function isValidAvatarUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function validateSocialFields(input: { website?: string; twitter?: string; telegram?: string; avatarUrl?: string }): string | null {
+  if (input.website && !isValidWebsiteUrl(input.website)) {
+    return 'Website must be a valid http or https URL';
+  }
+  if (input.twitter && !isValidTwitterHandle(input.twitter)) {
+    return 'Invalid Twitter handle (max 15 chars, alphanumeric/underscore)';
+  }
+  if (input.telegram && !isValidTelegramHandle(input.telegram)) {
+    return 'Invalid Telegram handle (max 32 chars, alphanumeric/underscore)';
+  }
+  if (input.avatarUrl && !isValidAvatarUrl(input.avatarUrl)) {
+    return 'Avatar URL must be a valid http or https URL';
+  }
+  return null;
+}
+
 /**
  * Check if a handle is available
  */
@@ -86,6 +129,22 @@ export async function registerAgent(
       success: false,
       error: 'Invalid handle. Must be 3-20 chars, alphanumeric/underscore, start with letter.',
     };
+  }
+
+  // Validate display name
+  if (!input.displayName || input.displayName.trim().length < 1 || input.displayName.length > 100) {
+    return { success: false, error: 'Display name must be 1-100 characters' };
+  }
+
+  // Validate bio length
+  if (input.bio && input.bio.length > 500) {
+    return { success: false, error: 'Bio must be 500 characters or less' };
+  }
+
+  // Validate social fields
+  const socialError = validateSocialFields(input);
+  if (socialError) {
+    return { success: false, error: socialError };
   }
 
   const supabase = getSupabase(env);
@@ -259,6 +318,22 @@ export async function updateAgent(
   const supabase = getSupabase(env);
   const normalized = normalizeAddress(wallet);
 
+  // Validate social fields on update
+  const socialError = validateSocialFields(updates);
+  if (socialError) {
+    return { success: false, error: socialError };
+  }
+
+  // Validate display name length on update
+  if (updates.displayName !== undefined && (updates.displayName.trim().length < 1 || updates.displayName.length > 100)) {
+    return { success: false, error: 'Display name must be 1-100 characters' };
+  }
+
+  // Validate bio length on update
+  if (updates.bio !== undefined && updates.bio.length > 500) {
+    return { success: false, error: 'Bio must be 500 characters or less' };
+  }
+
   const updateData: Record<string, unknown> = {};
   if (updates.displayName !== undefined) updateData.display_name = updates.displayName;
   if (updates.bio !== undefined) updateData.bio = updates.bio;
@@ -345,7 +420,12 @@ export async function searchAgents(
   limit: number = 10
 ): Promise<PaginatedResponse<Agent>> {
   const supabase = getSupabase(env);
-  const searchTerm = query.toLowerCase();
+  // Sanitize: strip PostgREST filter metacharacters to prevent filter injection
+  const searchTerm = query.toLowerCase().replace(/[%_(),.\\]/g, '');
+
+  if (!searchTerm) {
+    return { success: true, data: [] };
+  }
 
   const { data, error } = await supabase
     .from(TABLES.AGENTS)

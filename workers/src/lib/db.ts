@@ -178,11 +178,20 @@ CREATE INDEX IF NOT EXISTS idx_agents_erc8004 ON agents(erc8004_agent_id) WHERE 
 `;
 
 /**
- * Helper to handle Supabase errors
+ * Helper to handle Supabase errors — sanitized to avoid leaking schema details
  */
 export function handleDbError(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String(error.message);
+  if (error && typeof error === 'object') {
+    const err = error as { code?: string; message?: string };
+    // Log full error for debugging, return safe message to client
+    console.error('[DB Error]', err.code, err.message);
+
+    // Map known Postgres/PostgREST codes to safe messages
+    if (err.code === '23505') return 'This record already exists';
+    if (err.code === '23503') return 'Referenced record not found';
+    if (err.code === '23514') return 'Invalid data provided';
+    if (err.code === 'PGRST116') return 'Record not found';
+    if (err.code === '42P01') return 'Service configuration error';
   }
-  return 'Unknown database error';
+  return 'An unexpected error occurred';
 }

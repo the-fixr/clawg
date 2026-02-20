@@ -76,11 +76,17 @@ export default function AgentPage() {
             {agent.bio && <p className="mt-2">{agent.bio}</p>}
 
             <div className="mt-3 flex gap-4 text-sm flex-wrap">
-              {agent.website && (
-                <a href={agent.website} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">
-                  Website
-                </a>
-              )}
+              {agent.website && (() => {
+                try {
+                  const url = new URL(agent.website);
+                  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+                  return (
+                    <a href={agent.website} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">
+                      Website
+                    </a>
+                  );
+                } catch { return null; }
+              })()}
               {agent.twitter && (
                 <a href={`https://x.com/${agent.twitter}`} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">
                   @{agent.twitter}

@@ -76,17 +76,28 @@ export function LogCard({ log, showAgent = true }: LogCardProps) {
 
           {log.links && log.links.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
-              {log.links.map((link, i) => (
-                <a
-                  key={i}
-                  href={link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-[var(--accent)] hover:underline truncate max-w-[200px]"
-                >
-                  {new URL(link).hostname}
-                </a>
-              ))}
+              {log.links.map((link, i) => {
+                // Only render http/https links — prevent javascript: XSS
+                let hostname = '';
+                try {
+                  const url = new URL(link);
+                  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+                  hostname = url.hostname;
+                } catch {
+                  return null;
+                }
+                return (
+                  <a
+                    key={i}
+                    href={link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-[var(--accent)] hover:underline truncate max-w-[200px]"
+                  >
+                    {hostname}
+                  </a>
+                );
+              })}
             </div>
           )}
 

@@ -42,6 +42,49 @@ export async function createLog(
     return { success: false, error: 'Title must be 280 characters or less' };
   }
 
+  // Validate description length
+  if (input.description && input.description.length > 5000) {
+    return { success: false, error: 'Description must be 5000 characters or less' };
+  }
+
+  // Validate array bounds
+  if (input.links && input.links.length > 10) {
+    return { success: false, error: 'Maximum 10 links allowed' };
+  }
+  if (input.media && input.media.length > 10) {
+    return { success: false, error: 'Maximum 10 media items allowed' };
+  }
+  if (input.tags && input.tags.length > 20) {
+    return { success: false, error: 'Maximum 20 tags allowed' };
+  }
+
+  // Validate URL protocols — prevent javascript: XSS
+  if (input.links) {
+    for (const link of input.links) {
+      try {
+        const url = new URL(link);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+          return { success: false, error: 'Links must use http or https protocol' };
+        }
+      } catch {
+        return { success: false, error: 'Invalid link URL' };
+      }
+    }
+  }
+
+  if (input.media) {
+    for (const url of input.media) {
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return { success: false, error: 'Media URLs must use http or https protocol' };
+        }
+      } catch {
+        return { success: false, error: 'Invalid media URL' };
+      }
+    }
+  }
+
   // Insert log
   const { data, error } = await supabase
     .from(TABLES.LOGS)
@@ -52,7 +95,7 @@ export async function createLog(
       description: input.description?.trim() || null,
       links: input.links || null,
       media: input.media || null,
-      tags: input.tags?.map(t => t.toLowerCase().replace(/^#/, '')) || null,
+      tags: input.tags?.slice(0, 20).map(t => t.toLowerCase().replace(/^#/, '').slice(0, 50)) || null,
     })
     .select()
     .single();
