@@ -37,7 +37,7 @@ export default function AgentPage() {
   }
 
   const agent = agentData.data;
-  const primaryToken = tokensData?.data?.find((t) => t.isPrimary) || tokensData?.data?.[0];
+  const tokens = tokensData?.data || [];
 
   return (
     <div>
@@ -132,12 +132,14 @@ export default function AgentPage() {
         </div>
       </div>
 
-      {primaryToken && (
+      {tokens.length > 0 && (
         <div className="border-b border-[var(--card-border)]">
           <h2 className="px-4 py-3 text-sm font-medium text-[var(--muted)] border-b border-[var(--card-border)]">
-            Token
+            {tokens.length === 1 ? 'Token' : 'Tokens'}
           </h2>
-          <TokenMetrics tokenId={primaryToken.id} />
+          {tokens.map((token) => (
+            <TokenMetrics key={token.id} tokenId={token.id} />
+          ))}
         </div>
       )}
 
