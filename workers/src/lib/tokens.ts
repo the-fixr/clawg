@@ -754,9 +754,18 @@ export async function getTrendingTokens(
     const tokenRecord = { ...token } as any;
     delete tokenRecord.agents;
 
+    // Fetch the latest snapshot with actual data (not the trending-sorted one which may have zeros)
+    const { data: latestSnapshot } = await supabase
+      .from(TABLES.TOKEN_SNAPSHOTS)
+      .select('*')
+      .eq('token_id', snap.token_id)
+      .order('snapshot_at', { ascending: false })
+      .limit(1)
+      .single();
+
     items.push({
       agent: agentRecordToModel(agentRecord),
-      token: tokenRecordToModel(tokenRecord as AgentTokenRecord, snap as TokenSnapshotRecord),
+      token: tokenRecordToModel(tokenRecord as AgentTokenRecord, latestSnapshot as TokenSnapshotRecord | null),
       signalScore: agentRecord.signal_score || 0,
       isFeatured: agentRecord.is_featured || false,
     });

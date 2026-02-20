@@ -511,11 +511,11 @@ export function tokenRecordToModel(
     launchpad: record.launchpad || undefined,
     isPrimary: record.is_primary,
     createdAt: record.created_at,
-    currentPrice: snapshot?.price_usd ?? undefined,
-    marketCap: snapshot?.market_cap ?? undefined,
-    holders: snapshot?.holders ?? undefined,
-    volume24h: snapshot?.volume_24h ?? undefined,
-    liquidity: snapshot?.liquidity ?? undefined,
+    currentPrice: snapshot?.price_usd || undefined,
+    marketCap: snapshot?.market_cap || undefined,
+    holders: snapshot?.holders || undefined,
+    volume24h: snapshot?.volume_24h || undefined,
+    liquidity: snapshot?.liquidity || undefined,
     priceChange24h: snapshot?.price_change_24h ?? undefined,
   };
 }
