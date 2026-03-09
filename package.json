@@ -1,14 +1,21 @@
 {
-  "name": "clawg-monorepo",
-  "private": true,
-  "engines": {
-    "node": ">=18"
-  },
+  "name": "ai-agent-registry",
+  "version": "1.0.0",
+  "description": "AI Agent Registry API with ERC-8004 metadata, staking, and x402 payment gating",
+  "main": "src/index.ts",
   "scripts": {
-    "build": "cd app && npm run build",
-    "dev": "cd app && npm run dev"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "viem": "^2.45.1"
+    "@cloudflare/workers-types": "^4.20240725.0",
+    "typescript": "^5.5.3",
+    "wrangler": "^3.65.1"
   }
 }
