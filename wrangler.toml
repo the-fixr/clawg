@@ -1,0 +1,62 @@
+name = "clawg"
+main = "dist/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[build]
+command = "npm run build"
+cwd = "."
+watch_dir = "src"
+
+[build.upload]
+format = "modules"
+dir = "dist"
+main = "./index.js"
+
+# Production environment (default)
+[vars]
+ENVIRONMENT = "production"
+NODE_ENV = "production"
+
+# Staging environment
+[env.staging]
+name = "clawg-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+NODE_ENV = "production"
+
+# Preview environment (for PRs)
+[env.preview]
+name = "clawg-preview"
+
+[env.preview.vars]
+ENVIRONMENT = "preview"
+NODE_ENV = "production"
+
+# Production routes (update with your actual domain)
+# [[routes]]
+# pattern = "clawg.example.com/*"
+# zone_name = "example.com"
+
+# KV Namespaces (uncomment and configure if needed)
+# [[kv_namespaces]]
+# binding = "KV"
+# id = "YOUR_KV_NAMESPACE_ID"
+# preview_id = "YOUR_KV_PREVIEW_NAMESPACE_ID"
+
+# Durable Objects (uncomment and configure if needed)
+# [[durable_objects.bindings]]
+# name = "MY_DURABLE_OBJECT"
+# class_name = "MyDurableObject"
+
+# R2 Buckets (uncomment and configure if needed)
+# [[r2_buckets]]
+# binding = "MY_BUCKET"
+# bucket_name = "my-bucket"
+
+# D1 Databases (uncomment and configure if needed)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "clawg-db"
+# database_id = "YOUR_D1_DATABASE_ID"
