@@ -1,0 +1,856 @@
+openapi: 3.1.0
+info:
+  title: AI Agent Registry API
+  description: REST API for an AI agent registry with ERC-8004 metadata, capability queries, token staking for reputation, and x402 payment gating on premium endpoints.
+  version: 1.0.0
+  contact:
+    name: Obol API
+    email: api@obol.dev
+servers:
+  - url: https://agent-registry.obol.dev
+    description: Production server
+  - url: http://localhost:8787
+    description: Local development
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    x402Payment:
+      type: apiKey
+      in: header
+      name: X-Payment
+      description: x402 payment token for premium endpoint access
+
+  schemas:
+    AgentMetadata:
+      type: object
+      description: ERC-8004 compatible agent metadata
+      required:
+        - name
+        - version
+        - capabilities
+        - owner
+        - endpoint
+      properties:
+        name:
+          type: string
+          description: Human-readable agent name
+          minLength: 1
+          maxLength: 128
+        version:
+          type: string
+          description: Semantic version string
+          pattern: '^\d+\.\d+\.\d+$'
+        description:
+          type: string
+          description: Agent description
+          maxLength: 1024
+        capabilities:
+          type: array
+          description: List of capabilities the agent supports
+          items:
+            type: string
+          minItems: 1
+        owner:
+          type: string
+          description: Ethereum address of agent owner
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        endpoint:
+          type: string
+          description: Agent service endpoint URL
+          format: uri
+        schemas:
+          type: object
+          description: Input/output schema definitions
+          properties:
+            input:
+              type: object
+            output:
+              type: object
+        tags:
+          type: array
+          items:
+            type: string
+        licenseUrl:
+          type: string
+          format: uri
+        logoUrl:
+          type: string
+          format: uri
+        chainId:
+          type: integer
+          description: EVM chain ID where agent is registered
+          default: 1
+        tokenAddress:
+          type: string
+          description: ERC-20 token address for staking
+          pattern: '^0x[a-fA-F0-9]{40}$'
+
+    Agent:
+      allOf:
+        - $ref: '#/components/schemas/AgentMetadata'
+        - type: object
+          required:
+            - id
+            - createdAt
+            - updatedAt
+            - reputation
+          properties:
+            id:
+              type: string
+              description: Unique agent identifier
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            reputation:
+              $ref: '#/components/schemas/ReputationScore'
+            stakeAmount:
+              type: string
+              description: Current staked amount in wei
+            isVerified:
+              type: boolean
+              default: false
+
+    ReputationScore:
+      type: object
+      required:
+        - score
+        - totalStaked
+        - stakerCount
+      properties:
+        score:
+          type: number
+          description: Normalized reputation score 0-100
+          minimum: 0
+          maximum: 100
+        totalStaked:
+          type: string
+          description: Total tokens staked in wei
+        stakerCount:
+          type: integer
+          description: Number of unique stakers
+        rank:
+          type: integer
+          description: Global rank by reputation
+
+    StakeRequest:
+      type: object
+      required:
+        - staker
+        - amount
+        - signature
+      properties:
+        staker:
+          type: string
+          description: Ethereum address of the staker
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        amount:
+          type: string
+          description: Amount to stake in wei
+        signature:
+          type: string
+          description: EIP-712 signature authorizing the stake
+        txHash:
+          type: string
+          description: On-chain transaction hash
+          pattern: '^0x[a-fA-F0-9]{64}$'
+
+    StakeResponse:
+      type: object
+      properties:
+        agentId:
+          type: string
+        staker:
+          type: string
+        amount:
+          type: string
+        newTotalStaked:
+          type: string
+        newScore:
+          type: number
+        stakedAt:
+          type: string
+          format: date-time
+
+    UnstakeRequest:
+      type: object
+      required:
+        - staker
+        - amount
+        - signature
+      properties:
+        staker:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        amount:
+          type: string
+        signature:
+          type: string
+        txHash:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{64}$'
+
+    CapabilityQuery:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+        matchAll:
+          type: boolean
+          default: false
+          description: If true, agent must have all listed capabilities
+        minReputation:
+          type: number
+          minimum: 0
+          maximum: 100
+        minStake:
+          type: string
+        chainId:
+          type: integer
+        limit:
+          type: integer
+          default: 20
+          maximum: 100
+        offset:
+          type: integer
+          default: 0
+        sortBy:
+          type: string
+          enum: [reputation, stake, createdAt, name]
+          default: reputation
+        sortOrder:
+          type: string
+          enum: [asc, desc]
+          default: desc
+
+    AgentAnalytics:
+      type: object
+      properties:
+        agentId:
+          type: string
+        totalRequests:
+          type: integer
+        avgResponseTime:
+          type: number
+        successRate:
+          type: number
+        stakingHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              amount:
+                type: string
+              type:
+                type: string
+                enum: [stake, unstake]
+              staker:
+                type: string
+        reputationHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              score:
+                type: number
+
+    PaginatedAgents:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        hasMore:
+          type: boolean
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        agent:
+          $ref: '#/components/schemas/Agent'
+        weeklyChange:
+          type: number
+          description: Reputation change in past 7 days
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        requestId:
+          type: string
+
+    PaymentRequired:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        paymentDetails:
+          type: object
+          properties:
+            amount:
+              type: string
+            currency:
+              type: string
+            paymentUrl:
+              type: string
+            accepts:
+              type: array
+              items:
+                type: object
+                properties:
+                  scheme:
+                    type: string
+                  network:
+                    type: string
+                  maxAmountRequired:
+                    type: string
+                  payTo:
+                    type: string
+                  asset:
+                    type: string
+
+paths:
+  /agents:
+    post:
+      operationId: registerAgent
+      summary: Register a new AI agent
+      description: Register a new agent with ERC-8004 compatible metadata
+      tags: [Agents]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentMetadata'
+      responses:
+        '201':
+          description: Agent registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          description: Invalid agent metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Agent already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      operationId: listAgents
+      summary: List all registered agents
+      description: Retrieve paginated list of agents with optional filters
+      tags: [Agents]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [reputation, stake, createdAt, name]
+            default: reputation
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: chainId
+          in: query
+          schema:
+            type: integer
+        - name: isVerified
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Paginated list of agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAgents'
+
+  /agents/{agentId}:
+    get:
+      operationId: getAgent
+      summary: Get agent by ID
+      description: Retrieve full agent details including ERC-8004 metadata and reputation
+      tags: [Agents]
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      operationId: updateAgent
+      summary: Update agent metadata
+      description: Update agent metadata (owner only)
+      tags: [Agents]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentMetadata'
+      responses:
+        '200':
+          description: Agent updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden - not the agent owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      operationId: deleteAgent
+      summary: Deregister an agent
+      description: Remove agent from registry (owner only)
+      tags: [Agents]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Agent deleted
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents/query/capabilities:
+    post:
+      operationId: queryByCapability
+      summary: Query agents by capabilities
+      description: Find agents matching specified capabilities with optional reputation and stake filters
+      tags: [Query]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityQuery'
+      responses:
+        '200':
+          description: Matching agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAgents'
+        '400':
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents/{agentId}/stake:
+    post:
+      operationId: stakeTokens
+      summary: Stake tokens for agent reputation
+      description: Stake ERC-20 tokens to boost an agent's reputation score
+      tags: [Staking]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StakeRequest'
+      responses:
+        '200':
+          description: Stake recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeResponse'
+        '400':
+          description: Invalid stake request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      operationId: getStakes
+      summary: Get staking info for an agent
+      description: Retrieve all staking positions for an agent
+      tags: [Staking]
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: staker
+          in: query
+          description: Filter by staker address
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Staking information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agentId:
+                    type: string
+                  totalStaked:
+                    type: string
+                  stakerCount:
+                    type: integer
+                  stakes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        staker:
+                          type: string
+                        amount:
+                          type: string
+                        stakedAt:
+                          type: string
+                          format: date-time
+
+  /agents/{agentId}/unstake:
+    post:
+      operationId: unstakeTokens
+      summary: Unstake tokens from an agent
+      description: Remove staked tokens from an agent
+      tags: [Staking]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnstakeRequest'
+      responses:
+        '200':
+          description: Unstake recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StakeResponse'
+        '400':
+          description: Invalid unstake request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents/{agentId}/reputation:
+    get:
+      operationId: getReputation
+      summary: Get agent reputation score
+      description: Retrieve detailed reputation metrics for an agent
+      tags: [Reputation]
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reputation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReputationScore'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /agents/{agentId}/analytics:
+    get:
+      operationId: getAgentAnalytics
+      summary: Get premium agent analytics (x402 gated)
+      description: Retrieve detailed analytics including staking history and performance metrics. Requires x402 micropayment.
+      tags: [Premium]
+      security:
+        - x402Payment: []
+      parameters:
+        - name: agentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Payment
+          in: header
+          description: x402 payment token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detailed analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentAnalytics'
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRequired'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /leaderboard:
+    get:
+      operationId: getLeaderboard
+      summary: Get top agents by reputation (x402 gated)
+      description: Retrieve the top-ranked agents. Requires x402 micropayment for full leaderboard access.
+      tags: [Premium]
+      security:
+        - x402Payment: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+        - name: X-Payment
+          in: header
+          description: x402 payment token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaderboardEntry'
+                  generatedAt:
+                    type: string
+                    format: date-time
+        '402':
+          description: Payment required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRequired'
+
+  /capabilities:
+    get:
+      operationId: listCapabilities
+      summary: List all known capabilities
+      description: Retrieve all capability tags present in the registry
+      tags: [Query]
+      responses:
+        '200':
+          description: List of capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capabilities:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        agentCount:
+                          type: integer
+                        totalStaked:
+                          type: string
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      tags: [System]
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  version:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
